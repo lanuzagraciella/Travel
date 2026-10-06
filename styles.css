@@ -152,6 +152,14 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 }
 .leg-btn.hot { background: #fff6d6; border-color: #f2d27a; color: #7a5300; }
 .stops > li.leg-detail { padding: 4px 16px 10px 54px; cursor: default; border-bottom: 1px solid var(--line); }
+.stops > li.stay { align-items: flex-start; }
+.stay-tools { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.nights { font-size: 12px; min-width: 64px; text-align: center; }
+.btn.small { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
+.btn.wide { width: 100%; }
+.stops > li.travel-leg { background: #faf6f8; }
+.linkish { background: none; border: 0; padding: 0; color: var(--plum); font-weight: 600; text-decoration: underline; font-size: inherit; }
+.form select { width: auto; flex: 1; min-width: 0; }
 .verdict { font-size: 13px; margin: 6px 0; }
 .verdict.good { color: var(--ok); font-weight: 600; }
 .route { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: #fff; }

@@ -53,6 +53,10 @@
           ? L.polyline(points.map((p) => [p.lat, p.lng]), { color: "#2a7de1", weight: 5, opacity: 0.8, dashArray: "1 9", lineCap: "round" }).addTo(map)
           : null;
       },
+      fitPoints(points, bottomPad = 40) {
+        if (points.length === 1) return map.setView([points[0].lat, points[0].lng], 12);
+        map.fitBounds(points.map((p) => [p.lat, p.lng]), { paddingTopLeft: [60, 60], paddingBottomRight: [100, bottomPad + 40], maxZoom: 12 });
+      },
       resize: () => map.invalidateSize(),
       destroy: () => map.remove(),
     };
@@ -128,6 +132,12 @@
           strokeOpacity: 0,
           icons: [{ icon: { path: g.SymbolPath.CIRCLE, scale: 2.5, fillColor: "#2a7de1", fillOpacity: 0.9, strokeOpacity: 0 }, offset: "0", repeat: "11px" }],
         });
+      },
+      fitPoints(points, bottomPad = 40) {
+        if (points.length === 1) { map.setCenter({ lat: points[0].lat, lng: points[0].lng }); map.setZoom(12); return; }
+        const b = new g.LatLngBounds();
+        points.forEach((p) => b.extend({ lat: p.lat, lng: p.lng }));
+        map.fitBounds(b, { top: 60, left: 60, right: 100, bottom: bottomPad + 40 });
       },
       resize: () => {},               // Google Maps resizes itself
       destroy: () => { markers.forEach((m) => { m.map = null; }); route?.setMap(null); },

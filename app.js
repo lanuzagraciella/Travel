@@ -235,6 +235,12 @@
 
   function renderMarkers() {
     if (!map) return;
+    $("btn-pin").hidden = state.view === "itinerary" || !!state.adding;
+    if (state.view === "itinerary") return renderOverview();
+    if (state.overview) {
+      state.overview = false;
+      map.setView(state.trip.center, state.trip.zoom || 14);
+    }
     const showNames = map.getZoom() >= 16;
     const pins = spots().map((spot) => {
       const idx = plan().indexOf(spot.id);
@@ -437,22 +443,27 @@
     </div>`;
   }
 
+  const fmtDay = (d) => d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
   const fmtTime = (d) => (d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
 
-  function transitHtml(options, from, to) {
+  function transitHtml(options, from, to, leg = {}) {
     const google = `<a class="btn" target="_blank" rel="noopener" href="${window.WPTransit.googleTransitUrl(from, to)}">Live times in Google Maps</a>`;
     const walk = walkMin(from, to);
+    if (!options.length && leg.intercity) {
+      return `<p class="hint">No train or bus found for this day. Check Google Maps or the local rail operator.</p>
+        <div class="actions">${google}</div>`;
+    }
     if (!options.length) {
       return `<p class="hint">No bus, tram or metro route found here. It may be quicker to walk (${walk} min), or check Google Maps.</p>
         <div class="actions">${google}</div>`;
     }
     const best = options[0];
-    const verdict = best.minutes + 3 < walk
+    const verdict = leg.intercity ? "" : best.minutes + 3 < walk
       ? `<p class="verdict good">🚌 Saves about ${walk - best.minutes} min compared with walking (${walk} min).</p>`
       : `<p class="verdict">🚶 Walking (${walk} min) is about as fast. Transit is there if your feet need a break.</p>`;
     const option = (o, n) => `
       <div class="route ${n === 0 ? "best" : ""}">
-        <div class="route-head"><b>${o.minutes} min</b>
+        <div class="route-head"><b>${fmtMin(o.minutes)}</b>
           <span>${fmtTime(o.departure)} → ${fmtTime(o.arrival)} · ${o.transfers ? `${o.transfers} change${o.transfers > 1 ? "s" : ""}` : "direct"}</span>
           ${n === 0 ? `<span class="chip">Fastest</span>` : ""}</div>
         <div class="route-strip">${o.legs.map((l) => l.mode === "WALK"
@@ -465,7 +476,7 @@
       </div>`;
     return `${verdict}${options.map(option).join("")}
       <div class="actions">${google}</div>
-      <p class="hint">Times are for leaving now, from Transitous (free, community-run). Check signs and Google Maps for delays.</p>`;
+      <p class="hint">Times are for ${leg.when ? `${fmtDay(leg.when)}, from 9:00` : "leaving now"}, from Transitous (free, community-run). Check the station boards and Google Maps for changes${leg.intercity ? "; buy tickets from the rail operator or at the station" : ""}.</p>`;
   }
 
   async function toggleTransit(key, btn) {
@@ -474,11 +485,11 @@
     if (!box || !leg) return;
     if (!box.hidden) { box.hidden = true; return; }
     box.hidden = false;
-    box.innerHTML = `<p class="hint">🚌 Finding bus, tram and metro routes…</p>`;
+    box.innerHTML = `<p class="hint">${leg.intercity ? "🚆 Finding trains and buses…" : "🚌 Finding bus, tram and metro routes…"}</p>`;
     btn.disabled = true;
     try {
-      const options = await window.WPTransit.plan(leg.from, leg.to);
-      box.innerHTML = transitHtml(options, leg.from, leg.to);
+      const options = await window.WPTransit.plan(leg.from, leg.to, leg.when || new Date());
+      box.innerHTML = transitHtml(options, leg.from, leg.to, leg);
     } catch (err) {
       box.innerHTML = `<p class="hint">${esc(err.message)}</p>
         <div class="actions"><a class="btn" target="_blank" rel="noopener" href="${window.WPTransit.googleTransitUrl(leg.from, leg.to)}">Transit directions in Google Maps</a></div>`;
@@ -789,12 +800,129 @@
     });
   }
 
+  // ----- Multi-city itinerary -----
+  // An ordered list of stays, e.g. Brussels (2 nights) → Bruges (day trip)
+  // → Ghent (1 night). Each stay points at a trip (city) with its own spots.
+  // The same city can appear twice, e.g. returning to base after a day trip.
+  const itinerary = store.get("itinerary", { startDate: "", stays: [] });
+  const saveItinerary = () => store.set("itinerary", itinerary);
+  const tripById = (id) => trips.find((t) => t.id === id);
+  const cityPoint = (t) => ({ name: t.name, lat: t.center[0], lng: t.center[1] });
+  const stays = () => itinerary.stays.filter((x) => tripById(x.tripId));
+
+  // Arrival date of each stay, counted from the start date.
+  function stayDates() {
+    if (!itinerary.startDate) return [];
+    let day = new Date(`${itinerary.startDate}T12:00`);
+    return stays().map((x) => {
+      const arrive = new Date(day);
+      const nights = Number(x.nights) || 0;
+      day = new Date(day.getTime() + nights * 86400000);
+      return { arrive, leave: new Date(day) };
+    });
+  }
+
+  // Rough door-to-door train time, shown before live options load.
+  const roughTrainMin = (km) => Math.round(25 + (km / 85) * 60);
+
+  function showItinerary() {
+    state.view = "itinerary";
+    state.selected = null;
+    setHeading("My itinerary");
+    const list = stays();
+    const dates = stayDates();
+    const last = list.length ? cityPoint(tripById(list[list.length - 1].tripId)) : cityPoint(state.trip);
+    const lastId = list.length ? list[list.length - 1].tripId : null;
+    const candidates = trips
+      .filter((t) => t.id !== lastId)
+      .map((t) => ({ t, km: meters(last, cityPoint(t)) / 1000 }))
+      .sort((a, b) => a.km - b.km);
+
+    const rows = list.map((x, i) => {
+      const t = tripById(x.tripId);
+      const nights = Number(x.nights) || 0;
+      const d = dates[i];
+      let travel = "";
+      if (i > 0) {
+        const prev = tripById(list[i - 1].tripId);
+        const from = cityPoint(prev), to = cityPoint(t);
+        const km = meters(from, to) / 1000;
+        const key = `c${i}`;
+        const when = d ? new Date(d.arrive.getTime() - 3 * 3600000) : null; // 9:00 on travel day
+        state.legs[key] = { from, to, when, intercity: true };
+        travel = `<li class="leg travel-leg"><span>↓ 🚆 ${esc(prev.name)} → ${esc(t.name)} · ${Math.round(km)} km · ~${fmtMin(roughTrainMin(km))}${d ? ` · ${fmtDay(d.arrive)}` : ""}</span>
+            <button class="leg-btn hot" data-leg="${key}">🚆 Trains &amp; buses</button></li>
+          <li class="leg-detail" id="leg-${key}" hidden></li>`;
+      }
+      return `${travel}<li class="stay">
+          <span class="stop-letter" style="background:var(--plum)">${i + 1}</span>
+          <span class="stop-main">
+            <div class="stop-name">${esc(t.name)}</div>
+            <div class="stop-meta">${nights ? `${nights} night${nights > 1 ? "s" : ""}` : "Day trip"}${d ? ` · ${fmtDay(d.arrive)}${nights ? ` – ${fmtDay(d.leave)}` : ""}` : ""} · ${t.spots.length} spots</div>
+            <div class="stay-tools">
+              <button class="mini" data-nights="${i}" data-delta="-1" aria-label="One night less">−</button>
+              <span class="nights">${nights ? `${nights} night${nights > 1 ? "s" : ""}` : "day trip"}</span>
+              <button class="mini" data-nights="${i}" data-delta="1" aria-label="One night more">＋</button>
+              <button class="btn small primary" data-opencity="${esc(t.id)}">Open city →</button>
+            </div>
+          </span>
+          <button class="mini" data-stayup="${i}" title="Move up" aria-label="Move up">▲</button>
+          <button class="mini" data-staydown="${i}" title="Move down" aria-label="Move down">▼</button>
+          <button class="mini" data-stayremove="${i}" title="Remove from itinerary" aria-label="Remove from itinerary">✕</button>
+        </li>`;
+    }).join("");
+
+    const totalNights = list.reduce((n, x) => n + (Number(x.nights) || 0), 0);
+    body.innerHTML = `
+      <div class="section form">
+        <p class="hint">Plan the cities you'll visit in order. Set how long you stay; 0 nights is a day trip. Open a city to plan its spots and photos.</p>
+        <label for="it-start">Trip starts on</label>
+        <input id="it-start" type="date" value="${esc(itinerary.startDate)}" />
+        ${list.length ? `<p class="hint">${list.length} ${list.length > 1 ? "stops" : "stop"} · ${totalNights} night${totalNights === 1 ? "" : "s"}${dates.length ? ` · until ${fmtDay(dates[dates.length - 1].leave)}` : ""}</p>` : ""}
+      </div>
+      ${list.length ? `<ul class="plain stops">${rows}</ul>` : `<p class="empty">No cities yet. Add your first city below, e.g. Brussels, then Bruges or Ghent.</p>`}
+      <form class="section form" id="stay-form">
+        <label for="stay-city">${list.length ? "Then go to…" : "Start in…"}</label>
+        <div class="search-row">
+          <select id="stay-city">${candidates.map(({ t, km }) =>
+            `<option value="${esc(t.id)}">${esc(t.name)}${list.length && km >= 1 ? ` (${Math.round(km)} km)` : ""}</option>`).join("")}</select>
+          <select id="stay-nights" aria-label="Nights">
+            <option value="0">Day trip</option>${[1, 2, 3, 4, 5, 6, 7].map((n) => `<option value="${n}" ${n === 2 ? "selected" : ""}>${n} night${n > 1 ? "s" : ""}</option>`).join("")}
+          </select>
+          <button class="btn primary" type="submit">Add</button>
+        </div>
+        <p class="hint">City not listed? <button class="linkish" type="button" id="it-newcity">Add a new city</button> first.</p>
+      </form>`;
+    openPanel();
+    renderMarkers();
+  }
+
+  // Map overview of the whole itinerary: numbered cities joined in order.
+  function renderOverview() {
+    const list = stays();
+    const pts = list.map((x) => cityPoint(tripById(x.tripId)));
+    map.render(list.map((x, i) => {
+      const t = tripById(x.tripId);
+      const p = cityPoint(t);
+      return { lat: p.lat, lng: p.lng, title: t.name, label: String(i + 1), color: "#7a1f5c", showName: true,
+        onClick: () => { switchTrip(t); showPlan(); } };
+    }));
+    map.setRoute(pts);
+    if (pts.length && !state.overview) map.fitPoints(pts, PHONE() ? window.innerHeight * 0.6 : 40);
+    state.overview = true;
+  }
+
   // ----- Trips (city picker) -----
   function showTrips() {
     state.view = "trips";
     state.selected = null;
     setHeading("My trips");
+    const n = stays().length;
     body.innerHTML = `
+      <div class="section">
+        <button class="btn primary wide" id="btn-itinerary">🗺️ My itinerary${n ? ` · ${n} ${n > 1 ? "stops" : "stop"}` : ""}</button>
+        <p class="hint">Plan several cities in a row, e.g. Brussels → Bruges → Ghent, with trains between them.</p>
+      </div>
       <ul class="plain stops">${trips.map((t) => `
         <li data-trip="${esc(t.id)}" class="${t.id === state.trip.id ? "current" : ""}">
           <span class="stop-letter" style="background:var(--plum)">${esc(t.name.slice(0, 1).toUpperCase())}</span>
@@ -848,6 +976,8 @@
     if (!t || !confirm(`Delete your ${t.name} trip and its photos?`)) return;
     for (const s of t.spots) for (const p of await db.byspot(s.id).catch(() => [])) await db.del(p.id);
     trips.splice(trips.indexOf(t), 1);
+    itinerary.stays = itinerary.stays.filter((x) => x.tripId !== id);
+    saveItinerary();
     if (state.trip === t) switchTrip(trips[0]);
     save();
     showTrips();
@@ -1099,6 +1229,13 @@
     if (e.target.id === "search-form") return runSearch($("q").value);
     if (e.target.id === "city-form") return findCities($("city-q").value);
     if (e.target.id === "start-form") return findStart($("start-q").value);
+    if (e.target.id === "stay-form") {
+      itinerary.stays = stays();
+      itinerary.stays.push({ id: uid("s-"), tripId: $("stay-city").value, nights: Number($("stay-nights").value) });
+      saveItinerary();
+      state.overview = false;
+      return showItinerary();
+    }
     if (e.target.id === "settings-form") {
       const googleChanged = $("s-google").value.trim() !== settings.googleKey;
       settings.googleKey = $("s-google").value.trim();
@@ -1173,6 +1310,31 @@
       const r = state.results[Number(d.result)];
       return spotById(r.id) ? showSpot(r.id) : showPreview(r);
     }
+    if (t.id === "btn-itinerary") return showItinerary();
+    if (t.id === "it-newcity") { showTrips(); $("city-q")?.focus(); return; }
+    if (d.opencity) { switchTrip(tripById(d.opencity)); return showPlan(); }
+    if (d.nights !== undefined) {
+      const x = stays()[Number(d.nights)];
+      x.nights = Math.max(0, Math.min(30, (Number(x.nights) || 0) + Number(d.delta)));
+      saveItinerary();
+      return showItinerary();
+    }
+    if (d.stayup !== undefined || d.staydown !== undefined) {
+      const list = itinerary.stays = stays();
+      const i = Number(d.stayup ?? d.staydown), j = d.stayup !== undefined ? i - 1 : i + 1;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      saveItinerary();
+      state.overview = false;
+      return showItinerary();
+    }
+    if (d.stayremove !== undefined) {
+      itinerary.stays = stays();
+      itinerary.stays.splice(Number(d.stayremove), 1);
+      saveItinerary();
+      state.overview = false;
+      return showItinerary();
+    }
     if (d.deltrip) return deleteTrip(d.deltrip);
     if (d.trip) {
       switchTrip(trips.find((x) => x.id === d.trip));
@@ -1187,6 +1349,13 @@
       return addPopularSpots(true);
     }
     if (d.id) return showSpot(d.id);
+  });
+  body.addEventListener("change", (e) => {
+    if (e.target.id === "it-start") {
+      itinerary.startDate = e.target.value;
+      saveItinerary();
+      showItinerary();
+    }
   });
   body.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && e.target.dataset.open !== undefined) openLightbox(Number(e.target.dataset.open));
@@ -1203,6 +1372,7 @@
   $("btn-add").onclick = () => { setAdding(false); showSearch(); };
   $("btn-back").onclick = () => {
     if (state.view === "preview" && state.lastQuery) return showSearch(state.lastQuery);
+    if (state.view === "itinerary") { showTrips(); return renderMarkers(); }
     showPlan(); renderMarkers();
   };
   $("btn-close").onclick = () => { setPanel("closed"); state.selected = null; renderMarkers(); };

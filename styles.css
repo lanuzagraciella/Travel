@@ -129,11 +129,11 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 /* ---------- Plan list ---------- */
 .plan-summary { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
 .plan-summary b { color: var(--ink); }
-.stops li {
+.stops > li:not(.leg):not(.leg-detail) {
   display: flex; align-items: center; gap: 10px; padding: 10px 16px;
   border-bottom: 1px solid var(--line); cursor: pointer;
 }
-.stops li:hover { background: #fdf4f9; }
+.stops > li:not(.leg):not(.leg-detail):hover { background: #fdf4f9; }
 .stop-letter {
   width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   color: #fff; font-weight: 700; font-size: 13px; flex: none;
@@ -145,6 +145,26 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .mini { border: 0; background: transparent; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
 .mini:hover { background: var(--rose); color: var(--plum); }
 .leg { font-size: 12px; color: var(--muted); padding: 2px 16px 2px 54px; }
+.stops > li.leg { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 16px 4px 54px; font-size: 12px; color: var(--muted); }
+.leg-btn {
+  border: 1px solid var(--line); background: #fff; color: var(--plum); border-radius: 999px;
+  padding: 2px 10px; font-size: 12px; font-weight: 600;
+}
+.leg-btn.hot { background: #fff6d6; border-color: #f2d27a; color: #7a5300; }
+.stops > li.leg-detail { padding: 4px 16px 10px 54px; cursor: default; border-bottom: 1px solid var(--line); }
+.verdict { font-size: 13px; margin: 6px 0; }
+.verdict.good { color: var(--ok); font-weight: 600; }
+.route { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: #fff; }
+.route.best { border-color: var(--plum); }
+.route-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.route-head span { color: var(--muted); font-size: 12px; }
+.route-head .chip { color: var(--plum-dark); }
+.route-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 4px; }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; background: #2a7de1; color: #fff; }
+.walk-pill { background: #eee; color: var(--ink); font-weight: 600; }
+.arrow { color: var(--muted); }
+.route-steps { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.45; }
+.route-steps li { margin: 4px 0; }
 .empty { color: var(--muted); padding: 16px; line-height: 1.5; }
 
 /* ---------- Forms ---------- */

@@ -10,6 +10,7 @@ home with the photos they had in mind.
 - **Any other city.** Search for a city and the app automatically adds its most popular photo spots (landmarks from OpenStreetMap that have a Wikipedia article). **✨ Find popular spots** tops up any trip.
 - **Your own pins.** Use **📍 Drop pin** on the map, or **＋ Spot** to search for a place. Delete any pin with 🗑, either in the list or on the spot itself.
 - **🏁 Start point.** Set your hotel, the station or your current location, and the app orders your stops into the shortest walking tour from there. New stops slot into the tour automatically. **Walk it in Google Maps** opens turn-by-turn directions starting from your start point.
+- **🚌 Bus, tram and metro.** Every leg of the tour has a **Transit** button showing which line to take, where to get on and off, how many stops, departure times and whether it beats walking. Long walks (15 min+) are flagged in yellow, and each spot has a **Getting here** section. Routes come from [Transitous](https://transitous.org), a free, community-run planner; a **Live times in Google Maps** link is always there as a backup.
 - **A spot panel** with photo, address, best light, shot ideas and **walking time to nearby spots**. Use ⤢ to expand it; on phones it's a bottom sheet.
 - **Pose-inspiration gallery.** Upload photos you want to recreate. Tap one to view it full screen while you shoot.
 - **✨ AI photo coach.** Tap **How do I take this?** on an inspiration photo. Then share it to the free Claude app (or copy the ready-made question), and Claude explains how to recreate the shot with a phone camera. Paste the answer back to keep it with the photo.
@@ -52,6 +53,7 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | `maps.js` | Google Maps and OpenStreetMap map layers |
 | `places.js` | City and place search (Google Places or OpenStreetMap) |
 | `ai.js` | AI photo coach (Claude API) |
+| `transit.js` | Bus, tram and metro routes (Transitous) |
 | `data.js` | Brussels starter spots and categories |
 | `vendor/leaflet/` | [Leaflet](https://leafletjs.com) 1.9.4 map library (BSD-2) |
 

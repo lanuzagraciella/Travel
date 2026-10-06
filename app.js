@@ -405,6 +405,88 @@
     );
   }
 
+  // ----- Getting around: walking + bus/tram/metro -----
+  const LONG_WALK_MIN = 15;
+  state.legs = {};
+
+  function legHtml(from, to, key) {
+    state.legs[key] = { from, to };
+    const mins = walkMin(from, to);
+    const long = mins >= LONG_WALK_MIN;
+    return `<li class="leg"><span>↓ 🚶 ${mins} min walk</span>
+        <button class="leg-btn ${long ? "hot" : ""}" data-leg="${key}">${long ? "🚌 Long walk? See bus & tram" : "🚌 Transit"}</button></li>
+      <li class="leg-detail" id="leg-${key}" hidden></li>`;
+  }
+
+  // On a spot's page: how to get there from the previous stop (or the start).
+  function gettingHereHtml(spot) {
+    const i = plan().indexOf(spot.id);
+    const from = i > 0 ? spotById(plan()[i - 1]) : state.trip.start;
+    if (!from || i < 0) return "";
+    const key = "here";
+    state.legs[key] = { from, to: spot };
+    const mins = walkMin(from, spot);
+    return `<div class="section">
+      <h3>Getting here</h3>
+      <p>From <b>${esc(from.name)}</b>: 🚶 ${mins} min walk (${fmtDist(meters(from, spot) * DETOUR)})</p>
+      <div class="actions">
+        <button class="btn ${mins >= LONG_WALK_MIN ? "primary" : ""}" data-leg="${key}">🚌 Bus, tram &amp; metro options</button>
+        <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([from, spot])}">🚶 Walking directions</a>
+      </div>
+      <div class="leg-detail" id="leg-${key}" hidden></div>
+    </div>`;
+  }
+
+  const fmtTime = (d) => (d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "");
+
+  function transitHtml(options, from, to) {
+    const google = `<a class="btn" target="_blank" rel="noopener" href="${window.WPTransit.googleTransitUrl(from, to)}">Live times in Google Maps</a>`;
+    const walk = walkMin(from, to);
+    if (!options.length) {
+      return `<p class="hint">No bus, tram or metro route found here. It may be quicker to walk (${walk} min), or check Google Maps.</p>
+        <div class="actions">${google}</div>`;
+    }
+    const best = options[0];
+    const verdict = best.minutes + 3 < walk
+      ? `<p class="verdict good">🚌 Saves about ${walk - best.minutes} min compared with walking (${walk} min).</p>`
+      : `<p class="verdict">🚶 Walking (${walk} min) is about as fast. Transit is there if your feet need a break.</p>`;
+    const option = (o, n) => `
+      <div class="route ${n === 0 ? "best" : ""}">
+        <div class="route-head"><b>${o.minutes} min</b>
+          <span>${fmtTime(o.departure)} → ${fmtTime(o.arrival)} · ${o.transfers ? `${o.transfers} change${o.transfers > 1 ? "s" : ""}` : "direct"}</span>
+          ${n === 0 ? `<span class="chip">Fastest</span>` : ""}</div>
+        <div class="route-strip">${o.legs.map((l) => l.mode === "WALK"
+          ? `<span class="pill walk-pill">🚶 ${l.minutes}′</span>`
+          : `<span class="pill" ${l.color ? `style="background:${esc(l.color)};color:#fff"` : ""}>${l.icon} ${esc(l.line || l.label)}</span>`).join('<span class="arrow">›</span>')}</div>
+        <ol class="route-steps">${o.legs.map((l) => l.mode === "WALK"
+          ? `<li>🚶 Walk ${l.minutes} min${l.to ? ` to <b>${esc(l.to)}</b>` : ""}</li>`
+          : `<li>${l.icon} <b>${esc(l.label)} ${esc(l.line)}</b>${l.headsign ? ` toward ${esc(l.headsign)}` : ""}
+              <div class="muted">${l.departure ? `Leaves ${fmtTime(l.departure)} from ` : "From "}${esc(l.from)} · get off at <b>${esc(l.to)}</b>${l.stops ? ` (${l.stops} stop${l.stops > 1 ? "s" : ""}, ${l.minutes} min)` : ` (${l.minutes} min)`}</div></li>`).join("")}</ol>
+      </div>`;
+    return `${verdict}${options.map(option).join("")}
+      <div class="actions">${google}</div>
+      <p class="hint">Times are for leaving now, from Transitous (free, community-run). Check signs and Google Maps for delays.</p>`;
+  }
+
+  async function toggleTransit(key, btn) {
+    const box = $(`leg-${key}`);
+    const leg = state.legs[key];
+    if (!box || !leg) return;
+    if (!box.hidden) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `<p class="hint">🚌 Finding bus, tram and metro routes…</p>`;
+    btn.disabled = true;
+    try {
+      const options = await window.WPTransit.plan(leg.from, leg.to);
+      box.innerHTML = transitHtml(options, leg.from, leg.to);
+    } catch (err) {
+      box.innerHTML = `<p class="hint">${esc(err.message)}</p>
+        <div class="actions"><a class="btn" target="_blank" rel="noopener" href="${window.WPTransit.googleTransitUrl(leg.from, leg.to)}">Transit directions in Google Maps</a></div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   // ----- My day -----
   function showPlan(open = true) {
     state.view = "plan";
@@ -419,7 +501,7 @@
     const rows = stops.map((s, i) => {
       const cat = CATS[s.category] || CATS.sight;
       const prev = i ? stops[i - 1] : start;
-      const leg = prev ? `<li class="leg">↓ ${walkMin(prev, s)} min walk</li>` : "";
+      const leg = prev ? legHtml(prev, s, `p${i}`) : "";
       return `${leg}<li data-id="${esc(s.id)}">
         <span class="stop-letter" style="background:${cat.color}">${LETTERS[i] || "•"}</span>
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
@@ -440,6 +522,10 @@
           <span><b>${fmtMin(total)}</b> walking</span>
           <span><b>${fmtDist(dist)}</b></span>
         </div>
+        ${(() => {
+          const long = walk.filter((x, i) => i && walkMin(walk[i - 1], x) >= LONG_WALK_MIN).length;
+          return long ? `<p class="hint">🚌 ${long} long walk${long > 1 ? "s" : ""} in this tour. Tap the yellow buttons for bus, tram and metro options.</p>` : "";
+        })()}
         <div class="actions">
           ${stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize">✨ Optimize route</button>` : ""}
           ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">Walk it in Google Maps</a>` : ""}
@@ -502,6 +588,7 @@
         <p class="hint">Save photos you love from Instagram or Pinterest and upload them here. Tap one, then <b>✨ How do I take this?</b> for step-by-step phone camera directions.</p>
       </div>
       ${spot.poses?.length ? `<div class="section"><h3>Shot ideas</h3><ul class="plain poses">${spot.poses.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
+      ${gettingHereHtml(spot)}
       ${nearby.length ? `<div class="section">
         <h3>Walking distance from here</h3>
         <ul class="plain nearby">${nearby.map(({ s, d }) => `<li data-id="${esc(s.id)}">
@@ -1033,6 +1120,7 @@
       toast(state.trip.start ? `Shortest tour from ${state.trip.start.name} ✨` : "Route optimized ✨");
       return rerender();
     }
+    if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
     if (t.id === "btn-popular") return addPopularSpots(false);
     if (t.id === "start-locate") return locateStart();
     if (t.id === "start-pick") { setAdding("start"); if (PHONE()) setPanel("closed"); return; }

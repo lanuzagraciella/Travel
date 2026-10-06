@@ -17,6 +17,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); }
 button { font: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
 
 /* ---------- Top bar ---------- */
 .topbar {
@@ -166,11 +167,12 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
   background: var(--ok); color: #fff; font-size: 10px; width: 16px; height: 16px;
   border-radius: 50%; display: grid; place-items: center; border: 1.5px solid #fff;
 }
-.leaflet-tooltip.pin-label {
-  background: transparent; border: 0; box-shadow: none; color: var(--plum-dark);
-  font-weight: 600; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+.pin-wrap { position: relative; width: 30px; height: 30px; cursor: pointer; }
+.pin-name {
+  position: absolute; left: 30px; top: 2px; white-space: nowrap; pointer-events: none;
+  color: var(--plum-dark); font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
 }
-.leaflet-tooltip.pin-label::before { display: none; }
 
 .add-hint {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1100;
@@ -179,20 +181,65 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .add-hint button { background: none; border: 0; color: #ffd1ea; font-weight: 700; }
 .adding .map { cursor: crosshair; }
 
-/* ---------- Lightbox ---------- */
+/* ---------- Lightbox + AI guide ---------- */
 .lightbox {
-  position: fixed; inset: 0; z-index: 2000; background: rgba(15,8,12,.94);
-  display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 2000; background: #140b11;
+  display: flex; flex-direction: column;
 }
 .lightbox[hidden] { display: none; }
-.lightbox img { max-width: 92vw; max-height: 78vh; border-radius: 8px; }
-.lightbox .icon-btn { color: #fff; position: absolute; font-size: 26px; width: 48px; height: 48px; }
-.lb-close { top: 12px; right: 12px; }
-.lb-prev { left: 8px; top: 50%; }
-.lb-next { right: 8px; top: 50%; }
-.lb-bar { position: absolute; bottom: 24px; color: #fff; }
+.lb-main { flex: 1; min-height: 0; display: flex; }
+.lb-stage { flex: 1; min-width: 0; position: relative; display: grid; place-items: center; padding: 56px 56px 8px; }
+.lb-stage img { max-width: 100%; max-height: 100%; border-radius: 8px; object-fit: contain; }
+.lightbox .icon-btn { color: #fff; position: absolute; font-size: 26px; width: 48px; height: 48px; z-index: 2; }
+.lb-close { top: 8px; right: 8px; }
+.lb-prev { left: 4px; top: 50%; }
+.lb-next { right: 4px; top: 50%; }
+.lb-bar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); color: #fff;
+}
+.lb-bar .btn:disabled { opacity: .7; cursor: progress; }
 .check { display: inline-flex; gap: 8px; align-items: center; font-weight: 600; }
 .check input { width: 20px; height: 20px; accent-color: var(--ok); }
+
+.lb-guide {
+  width: 420px; max-width: 100%; overflow-y: auto; background: var(--card); color: var(--ink);
+  padding: 56px 20px 24px; line-height: 1.45; font-size: 14px;
+}
+.lb-guide[hidden] { display: none; }
+.lb-guide h4 { margin: 18px 0 6px; font-size: 14px; color: var(--plum-dark); }
+.lb-guide ul, .lb-guide ol { margin: 0; padding-left: 20px; }
+.lb-guide li { margin: 4px 0; }
+.guide-head p { font-size: 15px; margin: 8px 0 0; }
+.guide-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
+.guide-grid div { background: var(--rose); border-radius: 10px; padding: 8px 10px; }
+.guide-grid span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.guide-grid b { font-size: 13px; }
+.pro-tip { background: #fff6d6; border-radius: 10px; padding: 10px 12px; margin-top: 16px; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; left: 50%; top: calc(var(--top-h) + 12px); transform: translateX(-50%); z-index: 3000;
+  background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px;
+  max-width: min(92vw, 520px); box-shadow: 0 4px 14px rgba(0,0,0,.25);
+}
+.toast[hidden] { display: none; }
+
+/* ---------- Search, trips, settings ---------- */
+.city-btn { background: none; border: 0; color: inherit; padding: 0; text-align: left; max-width: 100%; }
+.city-btn:hover { text-decoration: underline; }
+.search-row { display: flex; gap: 8px; }
+.search-row input { flex: 1; min-width: 0; }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.muted { color: var(--muted); font-size: 12px; }
+.results li, .stops li.current { cursor: pointer; }
+.results li { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.results li:hover { background: #fdf4f9; }
+.results .stop-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stops li.current { background: #fdf4f9; }
+.form h3 { margin-top: 4px; }
+.thumb .badge.ai { top: auto; bottom: 6px; background: var(--plum); }
+.hero-emoji { font-size: 56px; }
 
 /* ---------- Phone: panel becomes a bottom sheet ---------- */
 @media (max-width: 720px) {
@@ -208,4 +255,8 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
   .panel[data-state="expanded"] { height: 100%; border-radius: 0; }
   .panel-grip { display: block; width: 40px; height: 5px; border-radius: 3px; background: #ddd; margin: 8px auto 0; flex: none; }
   .hero { height: 160px; }
+  .lb-main { flex-direction: column; overflow-y: auto; }
+  .lb-stage { flex: none; height: 62vh; padding: 52px 8px 8px; }
+  .lightbox.with-guide .lb-stage { height: 42vh; }
+  .lb-guide { width: 100%; padding-top: 16px; flex: none; overflow: visible; }
 }

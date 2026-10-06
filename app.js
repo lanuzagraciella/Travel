@@ -326,7 +326,7 @@
       updateHeader();
       if (state.view === "plan") showPlan(false);
       toast(fresh.length
-        ? `Added ${fresh.length} popular spots${toPlan ? " to your day" : ". Tap ＋ Add to put them in your day"} ✨`
+        ? `Added ${fresh.length} popular spot${fresh.length > 1 ? "s" : ""}${toPlan ? " to your day" : ". Tap ＋ Add to put them in your day"} ✨`
         : "No new popular spots found nearby.");
     } catch (err) {
       toast(err.message || "Couldn't load popular spots right now.");
@@ -557,6 +557,7 @@
   // ----- Spot details -----
   function detailsHtml(s) {
     return `
+      ${s.description ? `<p class="muted">${esc(s.description)}</p>` : ""}
       ${s.rating ? `<p>⭐ <b>${s.rating.toFixed(1)}</b>${s.ratingCount ? ` <span class="muted">(${s.ratingCount.toLocaleString()} Google reviews)</span>` : ""}</p>` : ""}
       ${s.address ? `<p>📍 ${esc(s.address)}</p>` : ""}
       ${s.phone ? `<p>📞 <a href="tel:${esc(s.phone.replace(/\s/g, ""))}">${esc(s.phone)}</a></p>` : ""}
@@ -625,7 +626,7 @@
   async function setHeroImage(spot, id) {
     const photos = await db.byspot(id).catch(() => []);
     const candidates = [
-      spot.photoUrl && { src: spot.photoUrl, credit: "Google Maps" },
+      spot.photoUrl && { src: spot.photoUrl, credit: spot.photoCredit || "Google Maps" },
       { lazy: () => wikiCover(spot), credit: "Wikipedia" },
       photos[0] && { src: urlFor(photos[0]), credit: "" },
     ].filter(Boolean);

@@ -145,7 +145,12 @@
   // Google (with a key): Google's own ranking of landmarks.
   // Free: OpenStreetMap landmarks that have a Wikipedia article, ranked by how
   // many languages the place's name is translated into (a good fame signal).
-  const OVERPASS = "https://overpass-api.de/api/interpreter";
+  // Free public Overpass servers; if one is busy we try the next.
+  const OVERPASS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+  ];
 
   function osmPopularity(tags) {
     let score = Object.keys(tags).filter((k) => k.startsWith("name:")).length;
@@ -176,9 +181,16 @@
   way${at}["bridge"="yes"]["wikipedia"];
 );
 out center tags;`;
-    const r = await fetch(OVERPASS, { method: "POST", body: new URLSearchParams({ data: query }) });
-    if (!r.ok) throw new Error("Couldn't load popular spots right now. Try again in a minute.");
-    const { elements = [] } = await r.json();
+    let elements = null;
+    for (const url of OVERPASS) {
+      try {
+        const r = await fetch(url, { method: "POST", body: new URLSearchParams({ data: query }) });
+        if (!r.ok) continue;
+        elements = (await r.json()).elements || [];
+        break;
+      } catch { /* try the next server */ }
+    }
+    if (!elements) throw new Error("OpenStreetMap is busy");
     // Skip duplicates: same name (in any language we see), same Wikipedia
     // article, or practically the same spot on the map.
     const seen = new Set();
@@ -214,6 +226,62 @@ out center tags;`;
       .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
   }
 
+  // Free and reliable: Wikipedia articles about places near the city centre,
+  // ranked by how many people read them in the last 30 days.
+  const NOT_A_SPOT = new RegExp(`\\b(?:${[
+    "station", "tram stop", "bus stop", "school", "college", "universit", "hospital", "clinic",
+    "embassy", "consulate", "company", "corporation", "bank", "hotel", "hostel", "airport",
+    "prison", "headquarters", "office", "ministry", "neighbourhood", "neighborhood",
+    "municipality", "commune", "district", "suburb", "borough", "arrondissement", "ward",
+    "constituency", "capital", "city in", "town in", "village", "region", "province", "country",
+    "football", "stadium", "sports", "club", "apartment", "residential", "car park", "motorway",
+    "tunnel", "railway", "metro line", "tram line", "bus line", "newspaper", "radio", "television",
+    "record label", "band", "company", "organization", "organisation", "association", "institute",
+  ].join("|")})`, "i");
+
+  function wikiCategory(text) {
+    if (/park|garden|bridge|square|viewpoint|fountain|statue|canal|lake|beach|hill|lookout|street|quay|river/i.test(text)) return "photo";
+    if (/restaurant|caf[eé]|brewery|bar\b|chocolat|food hall/i.test(text)) return "food";
+    if (/market|shopping|arcade|department store|gallery of shops/i.test(text)) return "shop";
+    return "sight";
+  }
+
+  async function popularSpotsWiki(center, cityName, radius = 5000, limit = 12) {
+    const params = new URLSearchParams({
+      action: "query", format: "json", formatversion: "2", origin: "*",
+      generator: "geosearch", ggscoord: `${center.lat}|${center.lng}`, ggsradius: String(radius), ggslimit: "50",
+      prop: "coordinates|pageimages|description|pageviews",
+      colimit: "max", piprop: "thumbnail", pithumbsize: "800", pilimit: "max", pvipdays: "30",
+    });
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?${params}`);
+    if (!r.ok) throw new Error("Wikipedia is unavailable");
+    const pages = (await r.json()).query?.pages || [];
+    const city = (cityName || "").toLowerCase();
+    return pages
+      .map((pg) => ({
+        pg,
+        coord: pg.coordinates?.[0],
+        views: Object.values(pg.pageviews || {}).reduce((n, v) => n + (v || 0), 0),
+        text: `${pg.title} ${pg.description || ""}`,
+      }))
+      .filter((x) => x.coord && x.pg.title.toLowerCase() !== city && !NOT_A_SPOT.test(x.pg.description || ""))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, limit)
+      .map(({ pg, coord, text }) => ({
+        id: `w-${pg.pageid}`,
+        name: pg.title.replace(/\s*\([^)]*\)$/, ""),   // "Old England (building)" -> "Old England"
+        lat: coord.lat,
+        lng: coord.lon,
+        address: "",
+        description: pg.description || "",
+        category: wikiCategory(text),
+        wiki: `en:${pg.title}`,
+        photoUrl: pg.thumbnail?.source || null,
+        photoCredit: "Wikipedia",
+        source: "wikipedia",
+      }));
+  }
+
   async function popularSpots(center, cityName) {
     if (google()) {
       const { Place } = await window.google.maps.importLibrary("places");
@@ -225,7 +293,20 @@ out center tags;`;
       });
       return places.map(fromGoogle);
     }
-    return popularSpotsOsm(center);
+    // Wikipedia first; top up from OpenStreetMap if Wikipedia finds too few.
+    let found = [];
+    let wikiError = null;
+    try { found = await popularSpotsWiki(center, cityName); } catch (err) { wikiError = err; }
+    if (found.length < 6) {
+      try {
+        const osm = await popularSpotsOsm(center);
+        const near = (a, b) => Math.abs(a.lat - b.lat) < 0.0004 && Math.abs(a.lng - b.lng) < 0.0006;
+        found = found.concat(osm.filter((o) => !found.some((f) => near(f, o) || f.name.toLowerCase() === o.name.toLowerCase())));
+      } catch (err) {
+        if (!found.length) throw new Error(`Couldn't load popular spots (${wikiError ? "Wikipedia and " : ""}OpenStreetMap busy). Check your connection and try again in a minute.`);
+      }
+    }
+    return found.slice(0, 12);
   }
 
   window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots };

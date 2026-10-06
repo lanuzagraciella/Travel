@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Wanderpose: travel photo planner</title>
+  <meta name="theme-color" content="#7a1f5c" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="btn-plan" title="My day plan" aria-label="Open my day plan">☰</button>
+    <div class="brand">
+      <div class="brand-title">Wanderpose · <span id="city-name"></span></div>
+      <div class="brand-sub" id="progress-text">Plan your spots and your shots</div>
+    </div>
+    <div class="progress" aria-hidden="true"><div class="progress-bar" id="progress-bar"></div></div>
+    <button class="pill-btn" id="btn-add" title="Add your own spot by tapping the map">＋ Spot</button>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" id="panel" data-state="closed" aria-live="polite">
+      <div class="panel-grip" id="panel-grip" aria-hidden="true"></div>
+      <div class="panel-tools">
+        <button class="icon-btn" id="btn-back" aria-label="Back to my day">←</button>
+        <span class="panel-heading" id="panel-heading"></span>
+        <button class="icon-btn" id="btn-expand" aria-label="Expand panel" title="Expand">⤢</button>
+        <button class="icon-btn" id="btn-close" aria-label="Close panel" title="Close">✕</button>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+    <div id="map" class="map"></div>
+    <div class="add-hint" id="add-hint" hidden>Tap the map where your spot is · <button id="btn-cancel-add">Cancel</button></div>
+  </main>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="icon-btn lb-close" id="lb-close" aria-label="Close">✕</button>
+    <button class="icon-btn lb-nav lb-prev" id="lb-prev" aria-label="Previous">‹</button>
+    <img id="lb-img" alt="Pose inspiration" />
+    <button class="icon-btn lb-nav lb-next" id="lb-next" aria-label="Next">›</button>
+    <div class="lb-bar">
+      <label class="check"><input type="checkbox" id="lb-done" /> I recreated this shot</label>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*" multiple hidden />
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

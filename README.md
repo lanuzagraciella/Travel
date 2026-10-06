@@ -5,25 +5,26 @@ home with the photos they had in mind.
 
 ## What it does
 
-- **Trips in any city.** Tap the city name in the top bar to switch trips, or search for a new city. Brussels comes pre-loaded as an example.
-- **Google Maps.** Once you add a Google Maps key in Settings (⚙), the app shows the real Google map. You can tap any place on it, search Google's places, and see Google photos, ratings, phone numbers and websites. Without a key it uses the free OpenStreetMap map and search.
-- **Pins and a day plan.** Pins in your day are lettered **A, B, C…** and joined by a walking route. **✨ Optimize route** reorders them to cut down walking, and **Walk it in Google Maps** opens turn-by-turn directions.
-- **A spot panel** with photo, address, rating, best light, shot ideas and **walking time to nearby spots**. Use ⤢ to expand it; on phones it's a bottom sheet.
+- **Free by default.** No API keys or payment needed: OpenStreetMap map and search, Wikipedia photos, and the AI photo coach through the free Claude app.
+- **Ready-made trips:** Brussels, Bruges, Ghent, Paris, Amsterdam and Luxembourg come with popular photo spots, best-light tips and pose ideas. Tap the city name in the top bar to switch.
+- **Any other city.** Search for a city and the app automatically adds its most popular photo spots (landmarks from OpenStreetMap that have a Wikipedia article). **✨ Find popular spots** tops up any trip.
+- **Your own pins.** Use **📍 Drop pin** on the map, or **＋ Spot** to search for a place. Delete any pin with 🗑, either in the list or on the spot itself.
+- **🏁 Start point.** Set your hotel, the station or your current location, and the app orders your stops into the shortest walking tour from there. New stops slot into the tour automatically. **Walk it in Google Maps** opens turn-by-turn directions starting from your start point.
+- **A spot panel** with photo, address, best light, shot ideas and **walking time to nearby spots**. Use ⤢ to expand it; on phones it's a bottom sheet.
 - **Pose-inspiration gallery.** Upload photos you want to recreate. Tap one to view it full screen while you shoot.
-- **✨ AI photo coach.** Tap **How do I take this?** on an inspiration photo and Claude explains how to recreate it with a phone camera: which lens (0.5x / 1x / 2x / 3x), phone height and angle, distance, settings, the pose, composition, light, a checklist for whoever holds the phone, and editing tips. Guides are saved with the photo, so you only pay for each one once.
+- **✨ AI photo coach.** Tap **How do I take this?** on an inspiration photo. Then share it to the free Claude app (or copy the ready-made question), and Claude explains how to recreate the shot with a phone camera. Paste the answer back to keep it with the photo.
 - **Photo progress.** The top bar tracks how many spots you've got your shot at.
 
-## Keys (Settings ⚙)
+## Optional: your own API keys (⚙ Settings → Advanced)
 
-Both are optional, and both are saved only in your browser. Neither is ever put in the code or this repo.
+Free mode covers everything. Keys are only needed for these extras, and both can cost money:
 
-| Key | What it unlocks | Where to get it |
+| Key | What it adds | Where to get it |
 | --- | --- | --- |
-| Google Maps API key | Real Google map, Google place search, photos and ratings | [Google Cloud console](https://console.cloud.google.com/google/maps-apis/credentials). Enable **Maps JavaScript API** and **Places API (New)**, and restrict the key to your site's address (HTTP referrer). Google gives a monthly free allowance. |
-| Claude API key | AI photo coach | [Anthropic Console](https://console.anthropic.com/settings/keys). Each guide costs a few cents. |
+| Google Maps API key | Google's map inside the app, Google place search, photos and ratings | [Google Cloud console](https://console.cloud.google.com/google/maps-apis/credentials). Enable **Maps JavaScript API** and **Places API (New)**, and restrict the key to your site's address. |
+| Claude API key | Photo guides made right inside the app | [Anthropic Console](https://console.anthropic.com/settings/keys). A few cents per guide. |
 
-The app has no server, so the AI coach calls the Claude API straight from your browser
-with your own key. Don't enter your key on a shared or public computer.
+Keys are saved only in your browser, never in the code or this repo.
 
 ## Run it
 

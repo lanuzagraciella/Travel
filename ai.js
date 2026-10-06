@@ -125,5 +125,28 @@ Keep every item short enough to read at a glance while standing at the spot.`;
     }
   }
 
-  window.WPAI = { photoGuide };
+  // Free mode: a ready-made question for the free Claude app (claude.ai),
+  // which the user sends together with the photo themselves.
+  function freePrompt({ spotName, cityName, bestTime }) {
+    return [
+      "I want to recreate the travel photo I've attached, using only my phone camera.",
+      spotName && `I'll be at ${spotName}${cityName ? ` in ${cityName}` : ""}.`,
+      bestTime && `Local tip for this spot: ${bestTime}.`,
+      "",
+      "Please study the photo and give me short, practical steps I can read while standing at the spot:",
+      "1. Lens: which zoom button to use (0.5x, 1x, 2x, 3x or 5x) and why.",
+      "2. Phone height and angle (e.g. knee height, tilted slightly up), orientation, and camera mode (Photo, Portrait, Live, burst, timer).",
+      "3. Distance between the photographer and me, and between me and the background.",
+      "4. Phone settings: grid, where to tap to focus, exposure, focus/exposure lock.",
+      "5. Composition: where I sit in the frame, leading lines, how much sky.",
+      "6. Light: best time of day and where the light should come from.",
+      "7. Pose: body position, hands, where to look, how to move.",
+      "8. A short numbered checklist for the friend holding the phone.",
+      "9. Simple edits to match the look.",
+      "",
+      "Describe poses and outfits generally; don't try to identify the person in the photo.",
+    ].filter((line) => line !== false && line !== undefined && line !== null).join("\n");
+  }
+
+  window.WPAI = { photoGuide, freePrompt };
 })();

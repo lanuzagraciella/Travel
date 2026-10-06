@@ -180,6 +180,17 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 }
 .add-hint button { background: none; border: 0; color: #ffd1ea; font-weight: 700; }
 .adding .map { cursor: crosshair; }
+.fab {
+  position: fixed; right: 16px; bottom: 120px; z-index: 950;
+  border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 700;
+  background: var(--plum); color: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.3);
+}
+.panel[data-state="expanded"] ~ .fab { display: none; }
+@media (max-width: 720px) {
+  .fab { bottom: auto; top: calc(var(--top-h) + 12px); }
+  body .toast { top: auto; bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .panel[data-state="expanded"] ~ .fab { display: none; }
+}
 
 /* ---------- Lightbox + AI guide ---------- */
 .lightbox {
@@ -215,6 +226,17 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .guide-grid div { background: var(--rose); border-radius: 10px; padding: 8px 10px; }
 .guide-grid span { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .guide-grid b { font-size: 13px; }
+.start-box { background: #faf6f8; }
+.start-row { display: flex; align-items: center; gap: 10px; }
+.start-letter { background: #23161f; font-size: 14px; }
+.start-box .results li { padding: 8px 0; }
+.notes { white-space: pre-wrap; background: var(--rose); border-radius: 10px; padding: 10px 12px; }
+.prompt-box { margin-top: 12px; font-size: 13px; }
+.prompt-box summary { cursor: pointer; color: var(--plum); font-weight: 600; }
+.prompt-box pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; background: #f7f2f5; padding: 10px; border-radius: 8px; }
+.notes-label { display: block; font-weight: 700; margin: 16px 0 6px; color: var(--plum-dark); }
+.lb-guide textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.form details summary { cursor: pointer; color: var(--plum-dark); }
 .pro-tip { background: #fff6d6; border-radius: 10px; padding: 10px 12px; margin-top: 16px; }
 
 /* ---------- Toast ---------- */

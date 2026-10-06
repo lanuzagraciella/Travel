@@ -141,5 +141,92 @@
     return true;
   }
 
-  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle };
+  // Popular photo spots around a city centre.
+  // Google (with a key): Google's own ranking of landmarks.
+  // Free: OpenStreetMap landmarks that have a Wikipedia article, ranked by how
+  // many languages the place's name is translated into (a good fame signal).
+  const OVERPASS = "https://overpass-api.de/api/interpreter";
+
+  function osmPopularity(tags) {
+    let score = Object.keys(tags).filter((k) => k.startsWith("name:")).length;
+    if (tags.tourism === "attraction" || tags.tourism === "viewpoint") score += 8;
+    if (tags.historic) score += 4;
+    if (tags.wikidata) score += 2;
+    if (tags["name:en"]) score += 2;
+    return score;
+  }
+
+  function osmCategory(tags) {
+    if (tags.tourism === "viewpoint" || tags.tourism === "artwork" || tags.leisure === "park" ||
+      tags.leisure === "garden" || tags.bridge || tags.man_made === "bridge") return "photo";
+    if (tags.amenity === "marketplace" || tags.shop) return "shop";
+    return "sight";
+  }
+
+  async function popularSpotsOsm(center, radius = 2500, limit = 12) {
+    const at = `(around:${radius},${center.lat},${center.lng})`;
+    const query = `[out:json][timeout:25];
+(
+  nwr${at}["tourism"~"^(attraction|viewpoint|museum|artwork|gallery)$"]["wikipedia"];
+  nwr${at}["historic"~"^(monument|castle|memorial|city_gate|palace|fort|ruins|building)$"]["wikipedia"];
+  nwr${at}["building"~"^(cathedral|church|basilica|palace|castle)$"]["wikipedia"];
+  nwr${at}["leisure"~"^(park|garden)$"]["wikipedia"];
+  nwr${at}["place"="square"]["wikipedia"];
+  nwr${at}["man_made"~"^(bridge|tower|lighthouse|windmill)$"]["wikipedia"];
+  way${at}["bridge"="yes"]["wikipedia"];
+);
+out center tags;`;
+    const r = await fetch(OVERPASS, { method: "POST", body: new URLSearchParams({ data: query }) });
+    if (!r.ok) throw new Error("Couldn't load popular spots right now. Try again in a minute.");
+    const { elements = [] } = await r.json();
+    // Skip duplicates: same name (in any language we see), same Wikipedia
+    // article, or practically the same spot on the map.
+    const seen = new Set();
+    const kept = [];
+    const near = (a, b) => Math.abs(a.lat - b.lat) < 0.0004 && Math.abs(a.lon - b.lon) < 0.0006;
+    return elements
+      .map((el) => ({ el, tags: el.tags || {}, lat: el.lat ?? el.center?.lat, lon: el.lon ?? el.center?.lon }))
+      .filter(({ tags }) => tags.name || tags["name:en"])
+      .sort((a, b) => osmPopularity(b.tags) - osmPopularity(a.tags))
+      .filter((x) => {
+        const keys = [x.tags.name, x.tags["name:en"], x.tags.wikipedia, x.tags.wikidata].filter(Boolean).map((k) => k.toLowerCase());
+        if (keys.some((k) => seen.has(k)) || kept.some((k) => near(k, x))) return false;
+        keys.forEach((k) => seen.add(k));
+        kept.push(x);
+        return true;
+      })
+      .slice(0, limit)
+      .map(({ el, tags }) => {
+        const lat = el.lat ?? el.center?.lat;
+        const lng = el.lon ?? el.center?.lon;
+        const street = [tags["addr:street"], tags["addr:housenumber"]].filter(Boolean).join(" ");
+        return {
+          id: `o-${el.type}${el.id}`,
+          name: tags["name:en"] || tags.name,
+          lat, lng,
+          address: [street, tags["addr:city"]].filter(Boolean).join(", "),
+          category: osmCategory(tags),
+          wiki: tags.wikipedia,   // "lang:Title", used for the cover photo
+          website: tags.website || "",
+          source: "osm",
+        };
+      })
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng));
+  }
+
+  async function popularSpots(center, cityName) {
+    if (google()) {
+      const { Place } = await window.google.maps.importLibrary("places");
+      const { places } = await Place.searchByText({
+        textQuery: `most famous landmarks and photo spots in ${cityName}`,
+        fields: FIELDS,
+        locationBias: { center, radius: 5000 },
+        maxResultCount: 12,
+      });
+      return places.map(fromGoogle);
+    }
+    return popularSpotsOsm(center);
+  }
+
+  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots };
 })();

@@ -91,6 +91,14 @@
 
   const settings = store.get("settings", { googleKey: "", claudeKey: "" });
   const trips = store.get("trips", null) || [seedTrip()];
+  // Add each ready-made trip once. One the user deletes stays deleted.
+  const seeded = store.get("seeded", ["brussels"]);
+  for (const t of window.SEED_TRIPS || []) {
+    if (seeded.includes(t.id)) continue;
+    seeded.push(t.id);
+    if (!trips.some((x) => x.id === t.id)) trips.push({ ...structuredClone(t), plan: null, done: [] });
+  }
+  store.set("seeded", seeded);
   const state = {
     trip: trips.find((t) => t.id === store.get("activeTrip", "")) || trips[0],
     selected: null,
@@ -116,13 +124,14 @@
     store.set("activeTrip", state.trip.id);
   }
 
-  // Order the stops to minimise walking: nearest-neighbour from the first
-  // stop, then 2-opt to untangle crossings. The first stop stays first.
-  function optimize(ids) {
+  // Order the stops to minimise walking: nearest-neighbour from the trip's
+  // start point (or the first stop if none is set), then 2-opt to untangle
+  // crossings. The start always stays first.
+  function optimize(ids, start = state.trip.start) {
     const pts = ids.map(spotById).filter(Boolean);
-    if (pts.length < 3) return pts.map((p) => p.id);
-    const route = [pts[0]];
-    const left = pts.slice(1);
+    if (!start && pts.length < 3) return pts.map((p) => p.id);
+    const route = [start ? { id: null, lat: start.lat, lng: start.lng } : pts[0]];
+    const left = start ? pts.slice() : pts.slice(1);
     while (left.length) {
       const last = route[route.length - 1];
       let best = 0;
@@ -144,7 +153,7 @@
         }
       }
     }
-    return route.map((p) => p.id);
+    return route.map((p) => p.id).filter((id) => id !== null);
   }
   if (!state.trip.plan) state.trip.plan = optimize(spots().filter((s) => s.category !== "stay").map((s) => s.id));
 
@@ -170,7 +179,9 @@
     if (!spot.wiki) return null;
     if (coverCache[spot.wiki]) return coverCache[spot.wiki];
     try {
-      const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(spot.wiki)}`);
+      const m = /^([a-z]{2,3}):(.+)$/.exec(spot.wiki);
+      const [lang, title] = m ? [m[1], m[2]] : ["en", spot.wiki];
+      const r = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`);
       if (!r.ok) return null;
       const j = await r.json();
       const src = j.thumbnail?.source || j.originalimage?.source;
@@ -193,8 +204,10 @@
     googleKey: settings.googleKey,
     onClick: (ll) => {
       if (!state.adding) return;
-      state.pendingLatLng = ll;
+      const mode = state.adding;
       setAdding(false);
+      if (mode === "start") return setStart({ name: "Pinned start point", ...ll });
+      state.pendingLatLng = ll;
       showAddForm();
     },
     onPlaceClick: (placeId) => { setAdding(false); showPreviewById(placeId); },
@@ -223,7 +236,7 @@
   function renderMarkers() {
     if (!map) return;
     const showNames = map.getZoom() >= 16;
-    map.render(spots().map((spot) => {
+    const pins = spots().map((spot) => {
       const idx = plan().indexOf(spot.id);
       const cat = CATS[spot.category] || CATS.sight;
       return {
@@ -236,14 +249,26 @@
         showName: showNames,
         onClick: () => showSpot(spot.id),
       };
-    }));
-    map.setRoute(plan().map(spotById).filter(Boolean));
+    });
+    const start = state.trip.start;
+    if (start) {
+      pins.push({
+        lat: start.lat, lng: start.lng, title: `Start: ${start.name}`,
+        label: "🏁", color: "#23161f", selected: false, done: false, showName: showNames,
+        onClick: () => { showPlan(); renderMarkers(); },
+      });
+    }
+    map.render(pins);
+    map.setRoute([start, ...plan().map(spotById)].filter(Boolean));
   }
 
+  // on: false | true (add a spot) | "start" (pick the start point)
   function setAdding(on) {
     state.adding = on;
-    document.body.classList.toggle("adding", on);
+    document.body.classList.toggle("adding", !!on);
     $("add-hint").hidden = !on;
+    $("add-hint-text").textContent = on === "start" ? "Tap the map where you'll start" : "Tap the map where your spot is";
+    $("btn-pin").hidden = on;
   }
 
   // ---------- Panel ----------
@@ -272,30 +297,143 @@
     else if (state.view === "spot" && state.selected) showSpot(state.selected, false, false);
   }
 
+  // ----- Popular photo spots -----
+  // toPlan: put the new spots straight into the day plan (used for new trips).
+  async function addPopularSpots(toPlan) {
+    const trip = state.trip;
+    const btn = $("btn-popular");
+    if (btn) { btn.disabled = true; btn.textContent = "✨ Finding spots…"; }
+    toast(`Finding popular photo spots in ${trip.name}…`, 15000);
+    try {
+      const center = { lat: trip.center[0], lng: trip.center[1] };
+      const found = await window.WPPlaces.popularSpots(center, trip.name);
+      if (state.trip !== trip) return;
+      const fresh = found.filter((f) => !spotById(f.id) &&
+        !spots().some((s) => s.name.toLowerCase() === f.name.toLowerCase() || meters(s, f) < 40));
+      for (const f of fresh) {
+        spots().push({ ...f, poses: [] });
+        if (toPlan) plan().push(f.id);
+      }
+      if (toPlan) trip.plan = optimize(plan());
+      save();
+      renderMarkers();
+      updateHeader();
+      if (state.view === "plan") showPlan(false);
+      toast(fresh.length
+        ? `Added ${fresh.length} popular spots${toPlan ? " to your day" : ". Tap ＋ Add to put them in your day"} ✨`
+        : "No new popular spots found nearby.");
+    } catch (err) {
+      toast(err.message || "Couldn't load popular spots right now.");
+    } finally {
+      const b = $("btn-popular");
+      if (b) { b.disabled = false; b.textContent = "✨ Find popular spots"; }
+    }
+  }
+
+  // ----- Start point (hotel, station, current location) -----
+  function startHtml(start) {
+    if (start && !state.editingStart) {
+      return `<div class="section start-box">
+        <div class="start-row"><span class="stop-letter start-letter">🏁</span>
+          <span class="stop-main"><div class="stop-name">Start: ${esc(start.name)}</div>
+            <div class="stop-meta">Your tour is ordered from here</div></span>
+          <button class="mini" id="start-change">Change</button>
+          <button class="mini" id="start-clear" title="Remove start point" aria-label="Remove start point">✕</button></div>
+      </div>`;
+    }
+    return `<form class="section form start-box" id="start-form">
+      <h3>🏁 Where do you start?</h3>
+      <p class="hint">Your hotel, the station, or where you are now. The app orders your stops into the shortest walking tour from there.</p>
+      <div class="actions" style="margin-top:4px">
+        <button class="btn" type="button" id="start-locate">📍 My location</button>
+        <button class="btn" type="button" id="start-pick">Tap on map</button>
+        ${start ? `<button class="btn" type="button" id="start-cancel">Cancel</button>` : ""}
+      </div>
+      <div class="search-row" style="margin-top:10px">
+        <input id="start-q" type="search" placeholder="Hotel, station or address" autocomplete="off" />
+        <button class="btn primary" type="submit">Find</button>
+      </div>
+      <ul class="plain results" id="start-results"></ul>
+    </form>`;
+  }
+
+  // With a start point set, every new stop slots into the shortest tour.
+  function addToPlan(id) {
+    if (plan().includes(id)) return;
+    plan().push(id);
+    if (state.trip.start) state.trip.plan = optimize(plan());
+  }
+
+  function setStart(start) {
+    state.trip.start = start;
+    state.editingStart = false;
+    state.trip.plan = optimize(plan());
+    save();
+    renderMarkers();
+    updateHeader();
+    showPlan();
+    if (start) {
+      map.panTo(start.lat, start.lng, PHONE() ? (window.innerHeight * 0.58) / 2 : 0);
+      toast(plan().length ? `Tour optimized from ${start.name} ✨` : `Start set: ${start.name}`);
+    }
+  }
+
+  async function findStart(q) {
+    const el = $("start-results");
+    if (!q.trim() || !el) return;
+    el.innerHTML = `<li class="empty">Searching…</li>`;
+    try {
+      state.startResults = await window.WPPlaces.searchPlaces(q.trim(), map.getCenter());
+    } catch (err) {
+      state.startResults = [];
+      toast(err.message || "Search failed");
+    }
+    el.innerHTML = state.startResults.length
+      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#23161f"></span>
+          <span class="stop-main"><div class="stop-name">${esc(r.name)}</div><div class="stop-meta">${esc(r.address)}</div></span>
+          <button class="mini" data-startresult="${i}">Start here</button></li>`).join("")
+      : `<li class="empty">Nothing found. Try “Tap on map” instead.</li>`;
+  }
+
+  function locateStart() {
+    if (!navigator.geolocation) return toast("Your browser can't share your location.");
+    toast("Finding your location…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setStart({ name: "My location", lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => toast("Couldn't get your location. Allow location access, or search for your hotel instead."),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
   // ----- My day -----
   function showPlan(open = true) {
     state.view = "plan";
     state.selected = null;
     setHeading(`My day in ${state.trip.name}`, false);
     const stops = plan().map(spotById).filter(Boolean);
+    const start = state.trip.start;
+    const walk = [start, ...stops].filter(Boolean);
     let total = 0, dist = 0;
-    stops.forEach((s, i) => { if (i) { total += walkMin(stops[i - 1], s); dist += meters(stops[i - 1], s) * DETOUR; } });
+    walk.forEach((s, i) => { if (i) { total += walkMin(walk[i - 1], s); dist += meters(walk[i - 1], s) * DETOUR; } });
 
     const rows = stops.map((s, i) => {
       const cat = CATS[s.category] || CATS.sight;
-      const leg = i ? `<li class="leg">↓ ${walkMin(stops[i - 1], s)} min walk</li>` : "";
+      const prev = i ? stops[i - 1] : start;
+      const leg = prev ? `<li class="leg">↓ ${walkMin(prev, s)} min walk</li>` : "";
       return `${leg}<li data-id="${esc(s.id)}">
         <span class="stop-letter" style="background:${cat.color}">${LETTERS[i] || "•"}</span>
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
           <div class="stop-meta">${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">▲</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">▼</button>
-        <button class="mini" data-remove="${esc(s.id)}" title="Remove from day" aria-label="Remove">✕</button>
+        <button class="mini" data-remove="${esc(s.id)}" title="Take out of today's plan (keeps the pin)" aria-label="Take out of today's plan">✕</button>
+        <button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button>
       </li>`;
     }).join("");
 
     const unplanned = spots().filter((s) => !plan().includes(s.id));
     body.innerHTML = `
+      ${startHtml(start)}
       <div class="section">
         <div class="plan-summary">
           <span><b>${stops.length}</b> stops</span>
@@ -303,16 +441,18 @@
           <span><b>${fmtDist(dist)}</b></span>
         </div>
         <div class="actions">
-          ${stops.length > 2 ? `<button class="btn primary" id="btn-optimize">✨ Optimize route</button>` : ""}
-          ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(stops)}">Walk it in Google Maps</a>` : ""}
+          ${stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize">✨ Optimize route</button>` : ""}
+          ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">Walk it in Google Maps</a>` : ""}
           <button class="btn" id="btn-find">🔍 Add spots</button>
+          <button class="btn" id="btn-drop-pin">📍 Drop a pin</button>
+          <button class="btn" id="btn-popular">✨ Find popular spots</button>
         </div>
       </div>
       ${stops.length ? `<ul class="plain stops">${rows}</ul>`
-        : `<p class="empty">Your day is empty. Search for places with “🔍 Add spots”${map?.kind === "google" ? ", or tap any place on the map" : ""}.</p>`}
+        : `<p class="empty">Your day is empty. Search for places with “🔍 Add spots” or tap “📍 Drop a pin”${map?.kind === "google" ? ", or tap any place on the map" : ""}.</p>`}
       ${unplanned.length ? `<div class="section"><h3>Saved, not in today's plan</h3><ul class="plain nearby">
         ${unplanned.map((s) => `<li data-id="${esc(s.id)}"><span class="dot" style="background:${(CATS[s.category] || CATS.sight).color}"></span>
-          <span class="nearby-name">${esc(s.name)}</span><button class="mini" data-addplan="${esc(s.id)}">＋ Add</button></li>`).join("")}
+          <span class="nearby-name">${esc(s.name)}</span><button class="mini" data-addplan="${esc(s.id)}">＋ Add</button><button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button></li>`).join("")}
       </ul></div>` : ""}`;
     if (open) openPanel();
   }
@@ -353,6 +493,7 @@
           <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([spot])}">Directions</a>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(spot)}">Open in Google Maps</a>
           <label class="btn check"><input type="checkbox" id="chk-done" ${isDone(id) ? "checked" : ""}/> Got my shot</label>
+          <button class="btn danger" id="btn-delete-spot">🗑 Delete pin</button>
         </div>
       </div>
       <div class="section">
@@ -367,8 +508,7 @@
           <span class="dot" style="background:${(CATS[s.category] || CATS.sight).color}"></span>
           <span class="nearby-name">${esc(s.name)}</span>
           <span class="walk">🚶 ${walkMin(spot, s)} min · ${fmtDist(d * DETOUR)}</span></li>`).join("")}</ul>
-      </div>` : ""}
-      <div class="section"><button class="btn danger" id="btn-delete-spot">Remove this spot from the trip</button></div>`;
+      </div>` : ""}`;
     if (open) openPanel();
     if (pan) map.panTo(spot.lat, spot.lng, PHONE() ? (window.innerHeight * 0.58) / 2 : 0);
 
@@ -416,7 +556,7 @@
       <div class="thumb" role="button" tabindex="0" data-open="${i}">
         <img src="${urlFor(p)}" alt="Pose inspiration ${i + 1}" loading="lazy" />
         ${p.recreated ? `<span class="badge">✓ Recreated</span>` : ""}
-        ${p.guide ? `<span class="badge ai">✨ Guide</span>` : ""}
+        ${p.guide || p.notes ? `<span class="badge ai">✨ Guide</span>` : ""}
         <button class="del" data-del="${esc(p.id)}" aria-label="Delete photo">✕</button>
       </div>`).join("") +
       `<button class="thumb add" id="btn-upload">＋<br/>Add inspo photos</button>`;
@@ -439,7 +579,7 @@
         </div>
         <p class="hint">${google
           ? "Results come from Google Maps. You can also tap any place on the map to add it."
-          : "Results come from OpenStreetMap. Add a Google Maps key in Settings (⚙) for Google's places, photos and ratings."}</p>
+          : "Results come from OpenStreetMap (free)."}</p>
         <div class="actions"><button class="btn" type="button" id="btn-drop-pin">📍 Drop a pin on the map instead</button></div>
       </form>
       <ul class="plain results" id="results"></ul>`;
@@ -482,7 +622,7 @@
     if (spotById(spot.id)) return spotById(spot.id);
     const s = { ...spot, poses: spot.poses || [] };
     spots().push(s);
-    if (toPlan) plan().push(s.id);
+    if (toPlan) addToPlan(s.id);
     save();
     renderMarkers();
     updateHeader();
@@ -572,7 +712,7 @@
         <li data-trip="${esc(t.id)}" class="${t.id === state.trip.id ? "current" : ""}">
           <span class="stop-letter" style="background:var(--plum)">${esc(t.name.slice(0, 1).toUpperCase())}</span>
           <span class="stop-main"><div class="stop-name">${esc(t.name)}</div>
-            <div class="stop-meta">${t.spots.length} spots · ${(t.plan || []).length} in plan${t.id === state.trip.id ? " · <b>open now</b>" : ""}</div></span>
+            <div class="stop-meta">${t.spots.length} spots${t.plan ? ` · ${t.plan.length} in plan` : ""}${t.id === state.trip.id ? " · <b>open now</b>" : ""}</div></span>
           ${trips.length > 1 ? `<button class="mini" data-deltrip="${esc(t.id)}" title="Delete trip" aria-label="Delete trip">🗑</button>` : ""}
         </li>`).join("")}
       </ul>
@@ -605,7 +745,8 @@
 
   function switchTrip(trip) {
     state.trip = trip;
-    trip.plan ||= [];
+    state.editingStart = false;
+    trip.plan ||= optimize(trip.spots.filter((s) => s.category !== "stay").map((s) => s.id));
     trip.done ||= [];
     state.selected = null;
     state.results = [];
@@ -630,25 +771,37 @@
     state.view = "settings";
     state.selected = null;
     setHeading("Settings");
+    const paid = settings.googleKey || settings.claudeKey;
     body.innerHTML = `
+      <div class="section">
+        <h3>${paid ? "Using your own API keys" : "Free mode ✓"}</h3>
+        <p>${paid
+          ? "Some features use your own Google or Claude API keys, which can cost money. Clear both keys below to go back to free mode."
+          : "Everything in Wanderpose is free: the OpenStreetMap map and search, your trips and photos, and the AI photo coach through the free Claude app. No API keys or payment needed."}</p>
+      </div>
       <form class="section form" id="settings-form">
-        <h3>Google Maps</h3>
-        <p class="hint">Shows the real Google map, Google's places, photos and ratings. Create a key in
-          <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener">Google Cloud</a>,
-          then enable <b>Maps JavaScript API</b> and <b>Places API (New)</b> for it. Restrict the key to your site's address.</p>
-        <label for="s-google">Google Maps API key</label>
-        <input id="s-google" type="password" autocomplete="off" value="${esc(settings.googleKey)}" placeholder="AIza…" />
-        <p class="hint">Map now: <b>${map.kind === "google" ? "Google Maps ✓" : "OpenStreetMap"}</b></p>
+        <details ${paid ? "open" : ""}>
+          <summary><b>Advanced: use your own API keys (may cost money)</b></summary>
+          <p class="hint">Only needed if you want the Google map inside the app, or photo guides without leaving the app. Both services bill your card for use beyond their free allowance.</p>
 
-        <h3 style="margin-top:20px">AI photo coach</h3>
-        <p class="hint">Upload an inspiration photo and Claude explains how to take it with your phone. Create a key at
-          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
-          Each guide costs a few cents of API credit.</p>
-        <label for="s-claude">Claude API key</label>
-        <input id="s-claude" type="password" autocomplete="off" value="${esc(settings.claudeKey)}" placeholder="sk-ant-…" />
+          <h3 style="margin-top:14px">Google Maps</h3>
+          <p class="hint">Shows the real Google map, Google's places, photos and ratings. Create a key in
+            <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener">Google Cloud</a>,
+            then enable <b>Maps JavaScript API</b> and <b>Places API (New)</b> for it. Restrict the key to your site's address.</p>
+          <label for="s-google">Google Maps API key</label>
+          <input id="s-google" type="password" autocomplete="off" value="${esc(settings.googleKey)}" placeholder="AIza…" />
+          <p class="hint">Map now: <b>${map.kind === "google" ? "Google Maps" : "OpenStreetMap (free)"}</b></p>
 
-        <p class="hint">🔒 Keys are saved only in this browser on this device. They're never added to the code or uploaded anywhere except to Google and Anthropic.</p>
-        <div class="actions"><button class="btn primary" type="submit">Save</button></div>
+          <h3 style="margin-top:14px">Claude API</h3>
+          <p class="hint">Makes photo guides right inside the app instead of in the Claude app. Create a key at
+            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+            Each guide costs a few cents.</p>
+          <label for="s-claude">Claude API key</label>
+          <input id="s-claude" type="password" autocomplete="off" value="${esc(settings.claudeKey)}" placeholder="sk-ant-…" />
+
+          <p class="hint">🔒 Keys are saved only in this browser on this device.</p>
+          <div class="actions"><button class="btn primary" type="submit">Save keys</button></div>
+        </details>
       </form>`;
     openPanel();
   }
@@ -667,7 +820,7 @@
     $("lb-done").checked = !!p.recreated;
     $("lb-prev").hidden = photos.length < 2;
     $("lb-next").hidden = photos.length < 2;
-    $("lb-ai").textContent = p.guide ? "✨ Show photo guide" : "✨ How do I take this?";
+    $("lb-ai").textContent = p.guide || p.notes ? "✨ Show photo guide" : "✨ How do I take this?";
     $("lb-ai").disabled = false;
     $("lb-guide").hidden = true;
     $("lightbox").classList.remove("with-guide");
@@ -708,16 +861,79 @@
     $("lightbox").classList.add("with-guide");
   }
 
+  // Free mode: send the photo and a ready-made question to the free Claude
+  // app, then paste the answer back here so it stays with the photo.
+  const photoFile = (p) => new File([p.blob], "inspiration.jpg", { type: p.blob.type || "image/jpeg" });
+  const canShareFile = (p) => {
+    try { return !!navigator.canShare?.({ files: [photoFile(p)] }); } catch { return false; }
+  };
+  function coachPrompt(p) {
+    const spot = spotById(p.spotId);
+    return window.WPAI.freePrompt({ spotName: spot?.name, cityName: state.trip.name, bestTime: spot?.bestTime });
+  }
+
+  function showFreeCoach(p) {
+    const share = canShareFile(p);
+    $("lb-guide").innerHTML = `
+      ${p.notes ? `<h4>📝 Your photo guide</h4><div class="notes">${esc(p.notes)}</div>` : ""}
+      <h4>✨ ${p.notes ? "Ask again" : "Free AI photo coach"}</h4>
+      <p>Get step-by-step phone camera directions from the free Claude app:</p>
+      <ol>
+        ${share
+          ? "<li>Tap <b>Share to Claude</b> and pick the Claude app. The question is copied too; paste it if it doesn't appear.</li>"
+          : "<li>Tap <b>Copy question &amp; open Claude</b>.</li><li>Drag this photo into the Claude chat (or save it and attach it), paste the question if it isn't there, and send.</li>"}
+        <li>Copy Claude's answer and paste it below to keep it with this photo.</li>
+      </ol>
+      <div class="actions">
+        ${share ? `<button class="btn primary" id="coach-share">Share to Claude</button>` : ""}
+        <button class="btn ${share ? "" : "primary"}" id="coach-open">Copy question &amp; open Claude</button>
+      </div>
+      <details class="prompt-box"><summary>See the question</summary><pre>${esc(coachPrompt(p))}</pre></details>
+      <label class="notes-label" for="coach-notes">Claude's answer</label>
+      <textarea id="coach-notes" rows="8" placeholder="Paste Claude's answer here">${esc(p.notes || "")}</textarea>
+      <div class="actions"><button class="btn primary" id="coach-save">Save to this photo</button></div>
+      <p class="hint">Uses your free claude.ai account. No API key or payment needed.</p>`;
+    $("lb-guide").hidden = false;
+    $("lb-guide").scrollTop = 0;
+    $("lightbox").classList.add("with-guide");
+  }
+
+  const copyText = (text) => navigator.clipboard?.writeText(text).catch(() => {});
+
+  $("lb-guide").addEventListener("click", async (e) => {
+    const p = state.lightbox.photos[state.lightbox.index];
+    const id = e.target.closest("button")?.id;
+    if (!p || !id) return;
+    if (id === "coach-share") {
+      const prompt = coachPrompt(p);
+      copyText(prompt);
+      try {
+        await navigator.share({ files: [photoFile(p)], text: prompt });
+      } catch (err) {
+        if (err?.name !== "AbortError") toast("Sharing didn't work. Try “Copy question & open Claude” instead.");
+      }
+    }
+    if (id === "coach-open") {
+      const prompt = coachPrompt(p);
+      copyText(prompt);
+      window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, "_blank", "noopener");
+      toast("Question copied. Add the photo in Claude and send.", 6000);
+    }
+    if (id === "coach-save") {
+      p.notes = $("coach-notes").value.trim();
+      await db.put(p);
+      toast(p.notes ? "Saved with this photo ✓" : "Removed the saved answer");
+      $("lb-ai").textContent = p.notes ? "✨ Show photo guide" : "✨ How do I take this?";
+      showFreeCoach(p);
+      renderGallery(p.spotId);
+    }
+  });
+
   async function aiGuide() {
     const p = state.lightbox.photos[state.lightbox.index];
     if (!p) return;
     if (p.guide) return showGuide(p.guide);
-    if (!settings.claudeKey) {
-      $("lightbox").hidden = true;
-      showSettings();
-      toast("Add your Claude API key to use the AI photo coach.");
-      return;
-    }
+    if (!settings.claudeKey) return showFreeCoach(p);
     const btn = $("lb-ai");
     btn.disabled = true;
     btn.textContent = "✨ Studying the photo…";
@@ -763,6 +979,21 @@
     if (e.key === "ArrowRight") stepLightbox(1);
   });
 
+  async function deleteSpot(id) {
+    const spot = spotById(id);
+    if (!spot || !confirm(`Delete the “${spot.name}” pin and its photos?`)) return;
+    for (const p of await db.byspot(id).catch(() => [])) await db.del(p.id);
+    state.trip.spots = spots().filter((s) => s.id !== id);
+    state.trip.plan = plan().filter((x) => x !== id);
+    setDone(id, false);
+    if (state.selected === id) state.selected = null;
+    save();
+    renderMarkers();
+    updateHeader();
+    toast(`Deleted ${spot.name}`);
+    showPlan();
+  }
+
   // ---------- Events ----------
   $("file-input").addEventListener("change", async (e) => {
     const spotId = state.selected;
@@ -780,29 +1011,45 @@
     e.preventDefault();
     if (e.target.id === "search-form") return runSearch($("q").value);
     if (e.target.id === "city-form") return findCities($("city-q").value);
+    if (e.target.id === "start-form") return findStart($("start-q").value);
     if (e.target.id === "settings-form") {
       const googleChanged = $("s-google").value.trim() !== settings.googleKey;
       settings.googleKey = $("s-google").value.trim();
       settings.claudeKey = $("s-claude").value.trim();
       store.set("settings", settings);
       if (googleChanged) { location.reload(); return; }
-      toast("Saved ✓");
+      toast(settings.claudeKey ? "Saved ✓" : "Saved ✓ Free mode is on");
       showPlan();
     }
   });
 
   body.addEventListener("click", async (e) => {
-    const t = e.target.closest("button, a, li[data-id], li[data-result], li[data-trip], li[data-city], .thumb, input");
+    const t = e.target.closest("button, a, li[data-id], li[data-result], li[data-trip], li[data-city], li[data-startresult], .thumb, input");
     if (!t || t.tagName === "A") return;
     const d = t.dataset;
 
-    if (t.id === "btn-optimize") { state.trip.plan = optimize(plan()); return rerender(); }
+    if (t.id === "btn-optimize") {
+      state.trip.plan = optimize(plan());
+      toast(state.trip.start ? `Shortest tour from ${state.trip.start.name} ✨` : "Route optimized ✨");
+      return rerender();
+    }
+    if (t.id === "btn-popular") return addPopularSpots(false);
+    if (t.id === "start-locate") return locateStart();
+    if (t.id === "start-pick") { setAdding("start"); if (PHONE()) setPanel("closed"); return; }
+    if (t.id === "start-change") { state.editingStart = true; return showPlan(); }
+    if (t.id === "start-cancel") { state.editingStart = false; return showPlan(); }
+    if (t.id === "start-clear") { state.trip.start = null; save(); renderMarkers(); return showPlan(); }
+    if (d.startresult !== undefined) {
+      const r = state.startResults[Number(d.startresult)];
+      return setStart({ name: r.name, lat: r.lat, lng: r.lng, placeId: r.placeId });
+    }
     if (t.id === "btn-find") return showSearch();
     if (t.id === "btn-drop-pin") { setAdding(true); if (PHONE()) setPanel("closed"); return; }
     if (t.id === "btn-upload") return $("file-input").click();
     if (t.id === "btn-toggle-plan") {
       const id = state.selected;
-      state.trip.plan = plan().includes(id) ? plan().filter((x) => x !== id) : [...plan(), id];
+      if (plan().includes(id)) state.trip.plan = plan().filter((x) => x !== id);
+      else addToPlan(id);
       return rerender();
     }
     if (t.id === "chk-done") { setDone(state.selected, t.checked); return rerender(); }
@@ -811,18 +1058,8 @@
       toast(`${s.name} added to ${state.trip.name}`);
       return showSpot(s.id);
     }
-    if (t.id === "btn-delete-spot") {
-      if (!confirm("Remove this spot and its photos from the trip?")) return;
-      const id = state.selected;
-      for (const p of await db.byspot(id)) await db.del(p.id);
-      state.trip.spots = spots().filter((s) => s.id !== id);
-      state.trip.plan = plan().filter((x) => x !== id);
-      setDone(id, false);
-      save();
-      renderMarkers();
-      updateHeader();
-      return showPlan();
-    }
+    if (t.id === "btn-delete-spot") return deleteSpot(state.selected);
+    if (d.delspot) { e.stopPropagation(); return deleteSpot(d.delspot); }
     if (d.del) {
       e.stopPropagation();
       if (!confirm("Remove this photo?")) return;
@@ -838,7 +1075,7 @@
       return rerender();
     }
     if (d.remove) { state.trip.plan = plan().filter((x) => x !== d.remove); return rerender(); }
-    if (d.addplan) { plan().push(d.addplan); return rerender(); }
+    if (d.addplan) { addToPlan(d.addplan); return rerender(); }
     if (d.quickadd !== undefined) {
       const s = addSpot(state.results[Number(d.quickadd)]);
       toast(`${s.name} added to your day`);
@@ -858,8 +1095,8 @@
       const trip = { id: uid("t-"), name: c.name, center: c.center, zoom: 14, spots: [], plan: [], done: [] };
       trips.push(trip);
       switchTrip(trip);
-      toast(`New trip: ${trip.name}. Search for the spots you want to see.`);
-      return showSearch();
+      showPlan();
+      return addPopularSpots(true);
     }
     if (d.id) return showSpot(d.id);
   });
@@ -889,6 +1126,10 @@
   };
   $("panel-grip").onclick = () => $("btn-expand").click();
   $("btn-cancel-add").onclick = () => setAdding(false);
+  $("btn-pin").onclick = () => {
+    setAdding(!state.adding);
+    if (state.adding && PHONE()) setPanel("closed");
+  };
 
   // ---------- Boot ----------
   save();
@@ -896,8 +1137,4 @@
   map = await window.WPMaps.createMap($("map"), mapOpts());
   renderMarkers();
   showPlan(!PHONE());
-  if (!settings.googleKey && !store.get("hintShown", false)) {
-    store.set("hintShown", true);
-    toast("Tip: add a Google Maps key in Settings (⚙) to use the real Google map.", 7000);
-  }
 })();

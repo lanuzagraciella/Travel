@@ -318,17 +318,23 @@
       if (state.trip !== trip) return;
       const fresh = found.filter((f) => !spotById(f.id) &&
         !spots().some((s) => s.name.toLowerCase() === f.name.toLowerCase() || meters(s, f) < 40));
+      const placed = {};
       for (const f of fresh) {
         spots().push({ ...f, poses: [] });
-        if (toPlan) plan().push(f.id);
+        if (trip.days) {
+          const d = placeInDays(f.id);
+          placed[d] = (placed[d] || 0) + 1;
+        } else if (toPlan) plan().push(f.id);
       }
-      if (toPlan) trip.plan = optimize(plan());
+      if (toPlan && !trip.days) trip.plan = optimize(plan());
       save();
       renderMarkers();
       updateHeader();
       if (state.view === "plan") showPlan(false);
       toast(fresh.length
-        ? `Added ${fresh.length} popular spot${fresh.length > 1 ? "s" : ""}${toPlan ? " to your day" : ". Tap ＋ Add to put them in your day"} ✨`
+        ? `Added ${fresh.length} popular spot${fresh.length > 1 ? "s" : ""}` + (trip.days
+          ? ` to your days${placed[-1] ? ` (${placed[-1]} didn't fit)` : ""} ✨`
+          : toPlan ? " to your day ✨" : ". Tap ＋ Add to put them in your day ✨")
         : "No new popular spots found nearby.");
     } catch (err) {
       toast(err.message || "Couldn't load popular spots right now.");
@@ -365,8 +371,35 @@
     </form>`;
   }
 
+  // With day plans, automatically added spots go to the closest day that
+  // still has time for them (or "didn't fit" if no day has room).
+  function placeInDays(id) {
+    const days = state.trip.days;
+    const s = spotById(id);
+    if (!days || !s || days.list.some((d) => d.includes(id))) return;
+    save(); // keep edits to the shown day
+    const startMin = toMin(days.start), endMin = toMin(days.end);
+    const options = days.list
+      .map((ids, d) => ({ d, dist: ids.length ? Math.min(...ids.map((x) => meters(spotById(x) || s, s))) : 1e9 }))
+      .sort((a, b) => a.dist - b.dist);
+    for (const { d } of options) {
+      const trial = optimize([...days.list[d], id]);
+      if (scheduleDay(trial, startMin).endsAt <= endMin) {
+        days.list[d] = trial;
+        if (d === days.current) state.trip.plan = trial.slice();
+        days.leftover = days.leftover.filter((x) => x !== id);
+        return d;
+      }
+    }
+    if (!days.leftover.includes(id)) days.leftover.push(id);
+    return -1;
+  }
+
   // With a start point set, every new stop slots into the shortest tour.
   function addToPlan(id) {
+    const sp = spotById(id);
+    if (sp) delete sp.skip;
+    if (state.trip.days) state.trip.days.leftover = state.trip.days.leftover.filter((x) => x !== id);
     if (plan().includes(id)) return;
     plan().push(id);
     if (state.trip.start) state.trip.plan = optimize(plan());
@@ -667,10 +700,12 @@
     return groups;
   }
 
-  function buildDays(count, start, end) {
+  // Returns a short summary of what changed, for the toast.
+  function buildDays(count, start, end, keepDay = 0) {
     const trip = state.trip;
     const startMin = toMin(start), endMin = toMin(end);
-    const list = spots().filter((s) => s.category !== "stay");
+    const before = trip.days ? JSON.stringify([trip.days.list, trip.days.leftover]) : null;
+    const list = spots().filter((s) => s.category !== "stay" && !s.skip);
     const fits = (ids) => scheduleDay(ids, startMin).endsAt <= endMin;
     let days = clusterSpots(list, count).map((g) => optimize(g.map((s) => s.id)));
     const leftover = [];
@@ -707,9 +742,17 @@
       days[light.i] = newLight;
       days[busy.i] = newBusy;
     }
-    trip.days = { count, start, end, list: days, leftover, current: 0 };
-    trip.plan = days[0].slice();
+    const current = Math.min(keepDay, count - 1);
+    trip.days = { count, start, end, list: days, leftover, current };
+    trip.plan = days[current].slice();
     save();
+    const stops = days.reduce((n, d) => n + d.length, 0);
+    return {
+      changed: before !== JSON.stringify([days, leftover]),
+      stops,
+      text: `${stops} stop${stops === 1 ? "" : "s"} over ${count} day${count > 1 ? "s" : ""}` +
+        (leftover.length ? ` · ${leftover.length} didn't fit` : ""),
+    };
   }
 
   function selectDay(i) {
@@ -1538,11 +1581,14 @@
       const count = Math.max(1, Math.min(14, Number($("d-count").value) || 1));
       const start = $("d-start").value || "09:00", end = $("d-end").value || "19:00";
       if (toMin(end) <= toMin(start) + 60) return toast("Make the end time at least an hour after the start.");
+      if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
+        return toast("Add some spots first: tap “Popular spots” or “Add spots”, then build your days.");
+      }
       state.editingDays = false;
-      buildDays(count, start, end);
+      const keep = state.trip.days && state.trip.days.count === count ? state.trip.days.current : 0;
+      const res = buildDays(count, start, end, keep);
       renderMarkers(); updateHeader(); showPlan();
-      const left = state.trip.days.leftover.length;
-      return toast(`Planned ${count} day${count > 1 ? "s" : ""} ✨${left ? ` · ${left} spot${left > 1 ? "s" : ""} didn't fit` : ""}`);
+      return toast(`Planned ${res.text} ✨`);
     }
     if (e.target.id === "post-form") {
       const spot = spotById(state.selected);
@@ -1589,9 +1635,14 @@
     if (t.id === "days-cancel") { state.editingDays = false; return showPlan(); }
     if (t.id === "days-rebuild") {
       const dd = state.trip.days;
-      buildDays(dd.count, dd.start, dd.end);
+      if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
+        return toast("There are no spots to plan yet. Tap “Popular spots” or “Add spots” first.");
+      }
+      const res = buildDays(dd.count, dd.start, dd.end, dd.current);
       renderMarkers(); updateHeader(); showPlan();
-      return toast("Days rebuilt ✨");
+      return toast(res.changed
+        ? `Rebuilt: ${res.text} ✨`
+        : `Already the best plan for these spots (${res.text}). Add, remove or change hours, then rebuild.`, 6000);
     }
     if (d.rn !== undefined) {
       const term = state.rnTerms[Number(d.rn)];
@@ -1646,7 +1697,15 @@
       [plan()[i], plan()[j]] = [plan()[j], plan()[i]];
       return rerender();
     }
-    if (d.remove) { state.trip.plan = plan().filter((x) => x !== d.remove); return rerender(); }
+    if (d.remove) {
+      state.trip.plan = plan().filter((x) => x !== d.remove);
+      if (state.trip.days) {
+        const sp = spotById(d.remove);
+        if (sp) sp.skip = true;   // stays out when you rebuild; ＋ Add brings it back
+        toast(`${sp?.name || "Spot"} won't be planned. Tap ＋ Add to bring it back.`);
+      }
+      return rerender();
+    }
     if (d.addplan) { addToPlan(d.addplan); return rerender(); }
     if (d.quickadd !== undefined) {
       const s = addSpot(state.results[Number(d.quickadd)]);

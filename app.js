@@ -262,7 +262,7 @@
     if (start) {
       pins.push({
         lat: start.lat, lng: start.lng, title: `Start: ${start.name}`,
-        label: "🏁", color: "#1c1c1e", selected: false, done: false, showName: showNames,
+        label: "🏁", color: "#7a1f5c", selected: false, done: false, showName: showNames,
         onClick: () => { showPlan(); renderMarkers(); },
       });
     }
@@ -430,7 +430,7 @@
       toast(err.message || "Search failed");
     }
     el.innerHTML = state.startResults.length
-      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#1c1c1e"></span>
+      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#7a1f5c"></span>
           <span class="stop-main"><div class="stop-name">${esc(r.name)}</div><div class="stop-meta">${esc(r.address)}</div></span>
           <button class="mini" data-startresult="${i}">Start here</button></li>`).join("")
       : `<li class="empty">Nothing found. Try “Tap on map” instead.</li>`;
@@ -1246,7 +1246,7 @@
     map.render(list.map((x, i) => {
       const t = tripById(x.tripId);
       const p = cityPoint(t);
-      return { lat: p.lat, lng: p.lng, title: t.name, label: String(i + 1), color: "#ff2d55", showName: true,
+      return { lat: p.lat, lng: p.lng, title: t.name, label: String(i + 1), color: "#7a1f5c", showName: true,
         onClick: () => { switchTrip(t); showPlan(); } };
     }));
     map.setRoute(pts);

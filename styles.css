@@ -1,11 +1,11 @@
 /* Wanderpose: styled after Apple's Human Interface Guidelines.
    System font, system colours, translucent materials, inset-grouped lists,
-   tinted buttons and a Maps-style bottom sheet. Follows light/dark mode. */
+   tinted buttons and a Maps-style bottom sheet. Always light, in Wanderpose plum. */
 
 :root {
-  --tint: #ff2d55;                         /* systemPink */
-  --tint-soft: rgba(255, 45, 85, 0.12);
-  --tint-press: rgba(255, 45, 85, 0.2);
+  --tint: #7a1f5c;                         /* Wanderpose plum */
+  --tint-soft: rgba(122, 31, 92, 0.1);
+  --tint-press: rgba(122, 31, 92, 0.18);
   --label: #000000;
   --label-2: rgba(60, 60, 67, 0.6);
   --label-3: rgba(60, 60, 67, 0.3);
@@ -29,27 +29,6 @@
   color: var(--label);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --tint: #ff375f;
-    --tint-soft: rgba(255, 55, 95, 0.18);
-    --tint-press: rgba(255, 55, 95, 0.28);
-    --label: #ffffff;
-    --label-2: rgba(235, 235, 245, 0.6);
-    --label-3: rgba(235, 235, 245, 0.3);
-    --sep: rgba(84, 84, 88, 0.6);
-    --bg: #000000;
-    --cell: #1c1c1e;
-    --cell-press: #2c2c2e;
-    --fill: rgba(120, 120, 128, 0.24);
-    --fill-2: rgba(120, 120, 128, 0.32);
-    --material: rgba(30, 30, 30, 0.72);
-    --material-thick: rgba(28, 28, 30, 0.9);
-    --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-    --green: #30d158; --orange: #ff9f0a; --red: #ff453a; --blue: #0a84ff; --yellow: #ffd60a;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -188,7 +167,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 /* ---------- Spot page ---------- */
 .hero {
   height: 220px; margin: 0 16px 16px; border-radius: var(--r); overflow: hidden;
-  background: linear-gradient(160deg, #ffd1dc, #c7b8ff);
+  background: linear-gradient(160deg, #f7c6df, #b98bd6);
   background-size: cover; background-position: center; position: relative;
   display: grid; place-items: center;
 }
@@ -292,7 +271,6 @@ ul.stops { overflow: hidden; }
 }
 .day-chip small { font-weight: 400; font-size: 11px; color: var(--label-2); }
 .day-chip.on { background: var(--cell); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
-@media (prefers-color-scheme: dark) { .day-chip.on { background: #636366; } .day-chip.on small { color: rgba(255, 255, 255, 0.75); } }
 .day-line { margin: 12px 0 2px; font-size: 15px; }
 .warn { color: var(--red); font-weight: 600; font-size: 13px; }
 .days-row { display: flex; gap: 8px; }
@@ -301,7 +279,7 @@ ul.stops { overflow: hidden; }
 
 /* Start point */
 .start-row { display: flex; align-items: center; gap: 12px; }
-.start-letter { background: var(--label); color: var(--cell); font-size: 14px; }
+.start-letter { background: var(--tint); color: #fff; font-size: 14px; }
 .start-box .results li { padding: 10px 0; margin: 0; }
 
 /* ---------- Transit ---------- */
@@ -372,7 +350,7 @@ ul.stops { overflow: hidden; }
   transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .pin span { transform: rotate(45deg); font-size: 13px; font-weight: 700; color: #fff; }
-.pin.selected { transform: rotate(-45deg) scale(1.25); box-shadow: 0 0 0 4px rgba(255, 45, 85, 0.25), 0 4px 10px rgba(0, 0, 0, 0.35); }
+.pin.selected { transform: rotate(-45deg) scale(1.25); box-shadow: 0 0 0 4px rgba(122, 31, 92, 0.25), 0 4px 10px rgba(0, 0, 0, 0.35); }
 .pin.done::after {
   content: "✓"; position: absolute; transform: rotate(45deg) translate(12px, -12px);
   background: var(--green); color: #fff; font-size: 10px; width: 16px; height: 16px;
@@ -414,7 +392,7 @@ ul.stops { overflow: hidden; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px) scale(0.96); } }
 
 /* ---------- Photo viewer + guide ---------- */
-.lightbox { position: fixed; inset: 0; z-index: 2000; background: #000; display: flex; flex-direction: column; color: #fff; }
+.lightbox { position: fixed; inset: 0; z-index: 2000; background: #140b11; display: flex; flex-direction: column; color: #fff; }
 .lb-main { flex: 1; min-height: 0; display: flex; }
 .lb-stage { flex: 1; min-width: 0; position: relative; display: grid; place-items: center; padding: 60px 60px 8px; }
 .lb-stage img { max-width: 100%; max-height: 100%; border-radius: 12px; object-fit: contain; }

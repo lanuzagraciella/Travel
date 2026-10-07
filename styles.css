@@ -161,6 +161,8 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .linkish { background: none; border: 0; padding: 0; color: var(--plum); font-weight: 600; text-decoration: underline; font-size: inherit; }
 .form select { width: auto; flex: 1; min-width: 0; }
 .rednote h3 { color: #ff2442; }
+.rn-btn { background: #ff2442; border-color: #ff2442; color: #fff; }
+.rn-mini { text-decoration: none; font-size: 15px; }
 .terms { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .term {
   border: 1px solid #ffc2cb; background: #fff1f3; color: #c4142f; border-radius: 999px;

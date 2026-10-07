@@ -416,11 +416,16 @@
   // Chinese, the way its users write) and keeps the posts you save.
   const rednoteUrl = (q) => `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(q)}`;
 
+  // Searches are about the spot only (never the whole city): its Chinese
+  // name when known, otherwise its own name.
+  const spotSearchName = (spot) => spot.zh || spot.name.replace(/\s*\([^)]*\)$/, "");
+  const spotRednoteUrl = (spot) => rednoteUrl(`${spotSearchName(spot)} 机位`);
+
   function rednoteTerms(spot) {
-    const zh = spot.zh;
-    const city = state.trip.zh || state.trip.name;
-    const base = zh || `${city} ${spot.name}`;
-    return [`${base} 机位`, `${base} 拍照姿势`, `${base} 拍照`, `${spot.name} photo spot`];
+    const base = spotSearchName(spot);
+    const terms = [`${base} 机位`, `${base} 拍照姿势`, `${base} 拍照`];
+    if (spot.zh) terms.push(`${spot.name} photo spot`);
+    return terms;
   }
 
   function postSite(url) {
@@ -468,35 +473,51 @@
     </div>`;
   }
 
-  const zhLoading = new Set();   // trip and spot ids with a lookup in flight
-
-  // Look up Chinese names once per spot (and per city), then refresh the section.
-  async function ensureChinese(spot) {
-    const trip = state.trip;
-    const jobs = [];
-    if (trip.zh === undefined) jobs.push(ensureCityChinese());
-    if (spot.zh === undefined && spot.wiki && !zhLoading.has(spot.id)) {
-      zhLoading.add(spot.id);
-      jobs.push(window.WPPlaces.chineseName(spot.wiki).then((z) => { spot.zh = z; }).finally(() => zhLoading.delete(spot.id)));
-    }
-    if (!jobs.length) return;
-    const results = await Promise.allSettled(jobs);
-    if (results.some((r) => r.status === "fulfilled")) save();
-    const box = $("rednote");
-    if (box && state.selected === spot.id) box.outerHTML = rednoteHtml(spot);
+  // Look up a spot's Chinese name once (via its Wikipedia article, found by
+  // location if needed). Resolves true when something new was learned.
+  const zhLoading = new Map();   // spot id -> lookup in flight
+  function spotChinese(spot) {
+    if (spot.zh !== undefined) return Promise.resolve(false);
+    if (zhLoading.has(spot.id)) return zhLoading.get(spot.id);
+    const job = (async () => {
+      try {
+        if (!spot.wiki && !spot.wikiChecked) {
+          spot.wikiChecked = true;
+          spot.wiki = await window.WPPlaces.wikiTitleNear(spot.name, spot.lat, spot.lng) || undefined;
+        }
+        spot.zh = spot.wiki ? await window.WPPlaces.chineseName(spot.wiki) : null;
+        save();
+        return !!spot.zh;
+      } catch {
+        return false;   // offline: try again next time
+      } finally {
+        zhLoading.delete(spot.id);
+      }
+    })();
+    zhLoading.set(spot.id, job);
+    return job;
   }
 
-  async function ensureCityChinese() {
+  async function ensureChinese(spot) {
+    if (!(await spotChinese(spot))) return;
+    const box = $("rednote");
+    if (box && state.selected === spot.id) box.outerHTML = rednoteHtml(spot);
+    const top = $("rn-top");
+    if (top && state.selected === spot.id) top.href = spotRednoteUrl(spot);
+  }
+
+  // Chinese names for every stop in the day plan, so each 📕 button searches
+  // that exact spot. Runs in the background, then refreshes the list once.
+  async function ensurePlanChinese() {
     const trip = state.trip;
-    if (trip.zh !== undefined || zhLoading.has(trip.id)) return;
-    zhLoading.add(trip.id);
-    try {
-      trip.zh = await window.WPPlaces.chineseName(trip.wiki || `en:${trip.name}`);
-      save();
-      if (state.view === "plan" && state.trip === trip) showPlan(false);
-    } catch { /* offline: try again next time */ } finally {
-      zhLoading.delete(trip.id);
+    const todo = plan().map(spotById).filter((s) => s && s.zh === undefined);
+    if (!todo.length) return;
+    let learned = false;
+    for (let i = 0; i < todo.length; i += 4) {
+      const done = await Promise.all(todo.slice(i, i + 4).map(spotChinese));
+      learned ||= done.some(Boolean);
     }
+    if (learned && state.trip === trip && state.view === "plan") showPlan(false);
   }
 
   // ----- Getting around: walking + bus/tram/metro -----
@@ -588,7 +609,7 @@
 
   // ----- My day -----
   function showPlan(open = true) {
-    ensureCityChinese();
+    ensurePlanChinese();
     state.view = "plan";
     state.selected = null;
     setHeading(`My day in ${state.trip.name}`, false);
@@ -608,6 +629,7 @@
           <div class="stop-meta">${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">▲</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">▼</button>
+        <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">📕</a>
         <button class="mini" data-remove="${esc(s.id)}" title="Take out of today's plan (keeps the pin)" aria-label="Take out of today's plan">✕</button>
         <button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button>
       </li>`;
@@ -632,7 +654,6 @@
           <button class="btn" id="btn-find">🔍 Add spots</button>
           <button class="btn" id="btn-drop-pin">📍 Drop a pin</button>
           <button class="btn" id="btn-popular">✨ Find popular spots</button>
-          <a class="btn" target="_blank" rel="noopener" href="${rednoteUrl(`${state.trip.zh || state.trip.name} 拍照机位`)}">📕 ${esc(state.trip.name)} on RedNote</a>
         </div>
       </div>
       ${stops.length ? `<ul class="plain stops">${rows}</ul>`
@@ -677,6 +698,7 @@
         ${detailsHtml(spot)}
         ${spot.bestTime ? `<p>🕒 <b>Best light:</b> ${esc(spot.bestTime)}</p>` : ""}
         <div class="actions">
+          <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">📕 ${esc(spot.name)} on RedNote</a>
           <button class="btn ${inPlan ? "" : "primary"}" id="btn-toggle-plan">${inPlan ? "✓ In my day" : "＋ Add to my day"}</button>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([spot])}">Directions</a>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(spot)}">Open in Google Maps</a>

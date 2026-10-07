@@ -340,5 +340,31 @@ out center tags;`;
     return zh;
   }
 
-  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots, chineseName };
+  // Find the Wikipedia article for a spot that doesn't have one yet (Google
+  // places, dropped pins): an article within 400 m whose title matches the name.
+  const simplify = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  function sameName(a, b) {
+    const x = simplify(a), y = simplify(b);
+    if (!x || !y) return false;
+    if (x === y || x.includes(y) || y.includes(x)) return true;
+    const wx = new Set(x.split(" ").filter((w) => w.length > 2));
+    const wy = y.split(" ").filter((w) => w.length > 2);
+    const shared = wy.filter((w) => wx.has(w)).length;
+    return shared > 0 && shared / Math.max(wx.size, wy.length) >= 0.6;
+  }
+
+  async function wikiTitleNear(name, lat, lng) {
+    const q = new URLSearchParams({
+      action: "query", format: "json", formatversion: "2", origin: "*",
+      list: "geosearch", gscoord: `${lat}|${lng}`, gsradius: "400", gslimit: "30",
+    });
+    const r = await fetch(`https://en.wikipedia.org/w/api.php?${q}`);
+    if (!r.ok) throw new Error("Wikipedia is unavailable");
+    const hits = (await r.json()).query?.geosearch || [];
+    const hit = hits.find((h) => sameName(h.title, name));
+    return hit ? `en:${hit.title}` : null;
+  }
+
+  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots, chineseName, wikiTitleNear };
 })();

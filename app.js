@@ -120,6 +120,8 @@
   const spotById = (id) => spots().find((s) => s.id === id);
 
   function save() {
+    const days = state.trip?.days;
+    if (days?.list && state.trip.plan) days.list[days.current] = state.trip.plan.slice();
     store.set("trips", trips);
     store.set("activeTrip", state.trip.id);
   }
@@ -607,13 +609,189 @@
     }
   }
 
+  // ----- Day-by-day plan -----
+  // Splits the trip's saved spots into days by area, orders each day as a
+  // walking route, and times every stop. trip.days = { count, start, end,
+  // list: [[spot ids]…], leftover: [spot ids], current }. The selected day is
+  // mirrored in trip.plan so the map, route and transit tools all work on it.
+  const VISIT_MIN = { photo: 30, sight: 60, food: 60, shop: 30, stay: 0 };
+  const LUNCH_AT = 12 * 60 + 30, LUNCH_MIN = 60;
+  const toMin = (hhmm) => { const [h, m] = String(hhmm || "09:00").split(":").map(Number); return h * 60 + (m || 0); };
+  const fmtClock = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(Math.round(min % 60)).padStart(2, "0")}`;
+
+  // Arrival and leaving times for a day's stops, with a lunch break if the
+  // day runs through lunchtime without a food stop.
+  function scheduleDay(ids, startMin) {
+    const stops = ids.map(spotById).filter(Boolean);
+    const hasFood = stops.some((s) => s.category === "food");
+    let t = startMin, prev = state.trip.start, lunched = hasFood;
+    const items = [];
+    for (const s of stops) {
+      if (prev) t += walkMin(prev, s);
+      if (!lunched && t >= LUNCH_AT) {
+        items.push({ type: "lunch", at: t });
+        t += LUNCH_MIN;
+        lunched = true;
+      }
+      const stay = VISIT_MIN[s.category] ?? 45;
+      items.push({ type: "stop", id: s.id, arrive: t, leave: t + stay });
+      t += stay;
+      prev = s;
+    }
+    return { items, endsAt: t };
+  }
+
+  // Group spots into `k` areas (k-means on coordinates, seeded far apart).
+  function clusterSpots(list, k) {
+    if (k <= 1) return [list];
+    if (list.length <= k) return Array.from({ length: k }, (_, i) => (list[i] ? [list[i]] : []));
+    const centers = [list[0]];
+    while (centers.length < k) {
+      centers.push(list.reduce((best, s) => {
+        const d = Math.min(...centers.map((c) => meters(c, s)));
+        return d > best.d ? { s, d } : best;
+      }, { s: list[0], d: -1 }).s);
+    }
+    let groups = [];
+    for (let iter = 0; iter < 8; iter++) {
+      groups = centers.map(() => []);
+      for (const s of list) {
+        let best = 0;
+        centers.forEach((c, i) => { if (meters(c, s) < meters(centers[best], s)) best = i; });
+        groups[best].push(s);
+      }
+      groups.forEach((g, i) => {
+        if (g.length) centers[i] = { lat: g.reduce((a, s) => a + s.lat, 0) / g.length, lng: g.reduce((a, s) => a + s.lng, 0) / g.length };
+      });
+    }
+    return groups;
+  }
+
+  function buildDays(count, start, end) {
+    const trip = state.trip;
+    const startMin = toMin(start), endMin = toMin(end);
+    const list = spots().filter((s) => s.category !== "stay");
+    const fits = (ids) => scheduleDay(ids, startMin).endsAt <= endMin;
+    let days = clusterSpots(list, count).map((g) => optimize(g.map((s) => s.id)));
+    const leftover = [];
+    // Trim days that run past the end time, then try to fit the extras into
+    // the nearest day that still has room.
+    days = days.map((ids) => {
+      const kept = ids.slice();
+      while (kept.length && !fits(kept)) leftover.push(kept.pop());
+      return kept;
+    });
+    for (let i = leftover.length - 1; i >= 0; i--) {
+      const s = spotById(leftover[i]);
+      const options = days
+        .map((ids, d) => ({ d, dist: ids.length ? Math.min(...ids.map((id) => meters(spotById(id), s))) : 0 }))
+        .sort((a, b) => a.dist - b.dist);
+      for (const { d } of options) {
+        const trial = optimize([...days[d], s.id]);
+        if (fits(trial)) { days[d] = trial; leftover.splice(i, 1); break; }
+      }
+    }
+    // Balance: move border spots from the busiest day to the lightest until
+    // the days end within about an hour of each other.
+    const endOf = (ids) => scheduleDay(ids, startMin).endsAt;
+    const centre = (ids) => ({ lat: ids.reduce((a, id) => a + spotById(id).lat, 0) / ids.length, lng: ids.reduce((a, id) => a + spotById(id).lng, 0) / ids.length });
+    for (let guard = 0; guard < 30 && days.length > 1; guard++) {
+      const order = days.map((ids, i) => ({ i, end: ids.length ? endOf(ids) : startMin })).sort((a, b) => b.end - a.end);
+      const busy = order[0], light = order[order.length - 1];
+      if (busy.end - light.end < 75 || days[busy.i].length < 2) break;
+      const target = days[light.i].length ? centre(days[light.i]) : spotById(days[busy.i][0]);
+      const move = days[busy.i].slice().sort((a, b) => meters(spotById(a), target) - meters(spotById(b), target))[0];
+      const newLight = optimize([...days[light.i], move]);
+      const newBusy = optimize(days[busy.i].filter((id) => id !== move));
+      if (!fits(newLight) || endOf(newLight) >= busy.end) break;
+      days[light.i] = newLight;
+      days[busy.i] = newBusy;
+    }
+    trip.days = { count, start, end, list: days, leftover, current: 0 };
+    trip.plan = days[0].slice();
+    save();
+  }
+
+  function selectDay(i) {
+    const days = state.trip.days;
+    save(); // stores edits to the current day
+    days.current = i;
+    state.trip.plan = days.list[i].slice();
+    save();
+    renderMarkers();
+    updateHeader();
+    showPlan();
+  }
+
+  // Dates for each day when the city is in the itinerary.
+  function dayDate(i) {
+    const idx = stays().findIndex((x) => x.tripId === state.trip.id);
+    const dates = stayDates();
+    if (idx < 0 || !dates[idx]) return null;
+    return new Date(dates[idx].arrive.getTime() + i * 86400000);
+  }
+  function defaultDayCount() {
+    const mine = stays().filter((x) => x.tripId === state.trip.id);
+    return mine.length ? mine.reduce((n, x) => n + Math.max(1, Number(x.nights) || 0), 0) : 2;
+  }
+
+  function daysHtml() {
+    const trip = state.trip;
+    const d = trip.days;
+    if (!d || state.editingDays) {
+      return `<form class="section form days-box" id="days-form">
+        <h3>📅 Plan my days</h3>
+        <p class="hint">The app splits your ${spots().length} saved spots into days by area, in walking order, with times for each stop and a lunch break.</p>
+        <div class="days-row">
+          <label>Days<input id="d-count" type="number" min="1" max="14" value="${d?.count || defaultDayCount()}" /></label>
+          <label>Start<input id="d-start" type="time" value="${esc(d?.start || "09:00")}" /></label>
+          <label>End<input id="d-end" type="time" value="${esc(d?.end || "19:00")}" /></label>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">📅 Build my days</button>
+          ${d ? `<button class="btn" type="button" id="days-cancel">Cancel</button>` : ""}</div>
+      </form>`;
+    }
+    const date = dayDate(d.current);
+    const sun = window.WPSun.sunTimes(date || new Date(), trip.center[0], trip.center[1]);
+    const t = (x) => (x ? fmtTime(x) : "–");
+    const sched = scheduleDay(plan(), toMin(d.start));
+    const over = sched.endsAt > toMin(d.end);
+    return `<div class="section days-box">
+      <div class="day-chips">${d.list.map((ids, i) => `<button class="day-chip ${i === d.current ? "on" : ""}" data-day="${i}">Day ${i + 1}<small>${ids.length} stops</small></button>`).join("")}</div>
+      <p class="day-line"><b>${date ? fmtDay(date) : `Day ${d.current + 1}`}</b> · ${esc(d.start)}–${esc(d.end)} · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs late</span>` : ""}</p>
+      <p class="hint">🌅 Sunrise ${t(sun.sunrise)}, golden light until ${t(sun.goldenMorningEnd)} · 🌇 golden light from ${t(sun.goldenEveningStart)}, sunset ${t(sun.sunset)}${date ? "" : " (today)"}</p>
+      ${d.leftover.length ? `<p class="hint">⚠️ ${d.leftover.length} spot${d.leftover.length > 1 ? "s" : ""} didn't fit: add a day, longer hours, or drop some. They're listed at the bottom.</p>` : ""}
+      <div class="actions"><button class="btn small" id="days-edit">Change days or hours</button><button class="btn small" id="days-rebuild">↻ Rebuild</button></div>
+    </div>`;
+  }
+
+  // Pose photos you've saved for each stop, shown right in the day list.
+  async function fillRowPoses() {
+    for (const el of document.querySelectorAll(".row-poses[data-poses]")) {
+      const photos = (await db.byspot(el.dataset.poses).catch(() => [])).sort((a, b) => a.createdAt - b.createdAt);
+      if (!photos.length || !el.isConnected) continue;
+      const guided = photos.filter((p) => p.notes || p.guide).length;
+      el.innerHTML = photos.slice(0, 4).map((p) => `<img src="${urlFor(p)}" alt="Pose to recreate" />`).join("") +
+        `<span class="muted">${photos.length} pose${photos.length > 1 ? "s" : ""}${guided ? ` · 📍 where to stand ✓` : ` · tap ✨ for where to stand`}</span>`;
+    }
+  }
+
   // ----- My day -----
   function showPlan(open = true) {
     ensurePlanChinese();
     state.view = "plan";
     state.selected = null;
-    setHeading(`My day in ${state.trip.name}`, false);
+    const days = state.trip.days;
+    const dDate = days ? dayDate(days.current) : null;
+    setHeading(days ? `Day ${days.current + 1}${dDate ? ` · ${fmtDay(dDate)}` : ""} · ${state.trip.name}` : `My day in ${state.trip.name}`, false);
     const stops = plan().map(spotById).filter(Boolean);
+    const sched = days ? scheduleDay(plan(), toMin(days.start)) : null;
+    const timeOf = (id) => sched?.items.find((x) => x.type === "stop" && x.id === id);
+    const lunchBefore = (id) => {
+      if (!sched) return null;
+      const i = sched.items.findIndex((x) => x.type === "stop" && x.id === id);
+      return i > 0 && sched.items[i - 1].type === "lunch" ? sched.items[i - 1] : null;
+    };
     const start = state.trip.start;
     const walk = [start, ...stops].filter(Boolean);
     let total = 0, dist = 0;
@@ -623,10 +801,13 @@
       const cat = CATS[s.category] || CATS.sight;
       const prev = i ? stops[i - 1] : start;
       const leg = prev ? legHtml(prev, s, `p${i}`) : "";
-      return `${leg}<li data-id="${esc(s.id)}">
+      const time = timeOf(s.id);
+      const lunch = lunchBefore(s.id);
+      return `${leg}${lunch ? `<li class="leg lunch">🍽️ ${fmtClock(lunch.at)} Lunch break (1 h)</li>` : ""}<li data-id="${esc(s.id)}">
         <span class="stop-letter" style="background:${cat.color}">${LETTERS[i] || "•"}</span>
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
-          <div class="stop-meta">${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div></span>
+          <div class="stop-meta">${time ? `🕘 <b>${fmtClock(time.arrive)}–${fmtClock(time.leave)}</b> · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
+          <div class="row-poses" data-poses="${esc(s.id)}"></div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">▲</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">▼</button>
         <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">📕</a>
@@ -635,8 +816,10 @@
       </li>`;
     }).join("");
 
-    const unplanned = spots().filter((s) => !plan().includes(s.id));
+    const elsewhere = new Set(days ? days.list.flat() : []);
+    const unplanned = spots().filter((s) => !plan().includes(s.id) && !elsewhere.has(s.id));
     body.innerHTML = `
+      ${daysHtml()}
       ${startHtml(start)}
       <div class="section">
         <div class="plan-summary">
@@ -658,11 +841,12 @@
       </div>
       ${stops.length ? `<ul class="plain stops">${rows}</ul>`
         : `<p class="empty">Your day is empty. Search for places with “🔍 Add spots” or tap “📍 Drop a pin”${map?.kind === "google" ? ", or tap any place on the map" : ""}.</p>`}
-      ${unplanned.length ? `<div class="section"><h3>Saved, not in today's plan</h3><ul class="plain nearby">
+      ${unplanned.length ? `<div class="section"><h3>${days ? (days.leftover.length ? "Didn't fit / not in any day" : "Not in any day") : "Saved, not in today's plan"}</h3><ul class="plain nearby">
         ${unplanned.map((s) => `<li data-id="${esc(s.id)}"><span class="dot" style="background:${(CATS[s.category] || CATS.sight).color}"></span>
           <span class="nearby-name">${esc(s.name)}</span><button class="mini" data-addplan="${esc(s.id)}">＋ Add</button><button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button></li>`).join("")}
       </ul></div>` : ""}`;
     if (open) openPanel();
+    fillRowPoses();
   }
 
   // ----- Spot details -----
@@ -1076,6 +1260,7 @@
   function switchTrip(trip) {
     state.trip = trip;
     state.editingStart = false;
+    state.editingDays = false;
     trip.plan ||= optimize(trip.spots.filter((s) => s.category !== "stay").map((s) => s.id));
     trip.done ||= [];
     state.selected = null;
@@ -1152,7 +1337,7 @@
     $("lb-done").checked = !!p.recreated;
     $("lb-prev").hidden = photos.length < 2;
     $("lb-next").hidden = photos.length < 2;
-    $("lb-ai").textContent = p.guide || p.notes ? "✨ Show photo guide" : "✨ How do I take this?";
+    $("lb-ai").textContent = p.guide || p.notes ? "✨ Show photo guide" : "✨ Where to stand & how to pose";
     $("lb-ai").disabled = false;
     $("lb-guide").hidden = true;
     $("lightbox").classList.remove("with-guide");
@@ -1168,6 +1353,7 @@
     const c = g.camera || {};
     return `
       <div class="guide-head"><span class="chip">${esc(g.shot_type)}</span><p>${esc(g.summary)}</p></div>
+      ${g.where_to_stand ? `<h4>📍 Where to stand</h4><p>${esc(g.where_to_stand)}</p>` : ""}
       <div class="guide-grid">
         <div><span>Lens</span><b>${esc(c.lens)}</b></div>
         <div><span>Orientation</span><b>${esc(c.orientation)}</b></div>
@@ -1201,15 +1387,15 @@
   };
   function coachPrompt(p) {
     const spot = spotById(p.spotId);
-    return window.WPAI.freePrompt({ spotName: spot?.name, cityName: state.trip.name, bestTime: spot?.bestTime });
+    return window.WPAI.freePrompt({ spotName: spot?.name, cityName: state.trip.name, bestTime: spot?.bestTime, address: spot?.address, lat: spot?.lat, lng: spot?.lng });
   }
 
   function showFreeCoach(p) {
     const share = canShareFile(p);
     $("lb-guide").innerHTML = `
-      ${p.notes ? `<h4>📝 Your photo guide</h4><div class="notes">${esc(p.notes)}</div>` : ""}
-      <h4>✨ ${p.notes ? "Ask again" : "Free AI photo coach"}</h4>
-      <p>Get step-by-step phone camera directions from the free Claude app:</p>
+      ${p.notes ? `<h4>📝 Your photo guide: where to stand & how to pose</h4><div class="notes">${esc(p.notes)}</div>` : ""}
+      <h4>✨ ${p.notes ? "Ask again" : "Where to stand & how to pose"}</h4>
+      <p>Find out exactly where to stand for this background, how to pose, and the camera settings, using the free Claude app:</p>
       <ol>
         ${share
           ? "<li>Tap <b>Share to Claude</b> and pick the Claude app. The question is copied too; paste it if it doesn't appear.</li>"
@@ -1255,7 +1441,7 @@
       p.notes = $("coach-notes").value.trim();
       await db.put(p);
       toast(p.notes ? "Saved with this photo ✓" : "Removed the saved answer");
-      $("lb-ai").textContent = p.notes ? "✨ Show photo guide" : "✨ How do I take this?";
+      $("lb-ai").textContent = p.notes ? "✨ Show photo guide" : "✨ Where to stand & how to pose";
       showFreeCoach(p);
       renderGallery(p.spotId);
     }
@@ -1287,7 +1473,7 @@
       renderGallery(p.spotId);
     } catch (err) {
       toast(err.message, 7000);
-      btn.textContent = "✨ How do I take this?";
+      btn.textContent = "✨ Where to stand & how to pose";
     } finally {
       btn.disabled = false;
     }
@@ -1317,6 +1503,10 @@
     for (const p of await db.byspot(id).catch(() => [])) await db.del(p.id);
     state.trip.spots = spots().filter((s) => s.id !== id);
     state.trip.plan = plan().filter((x) => x !== id);
+    if (state.trip.days) {
+      state.trip.days.list = state.trip.days.list.map((ids) => ids.filter((x) => x !== id));
+      state.trip.days.leftover = state.trip.days.leftover.filter((x) => x !== id);
+    }
     setDone(id, false);
     if (state.selected === id) state.selected = null;
     save();
@@ -1344,6 +1534,16 @@
     if (e.target.id === "search-form") return runSearch($("q").value);
     if (e.target.id === "city-form") return findCities($("city-q").value);
     if (e.target.id === "start-form") return findStart($("start-q").value);
+    if (e.target.id === "days-form") {
+      const count = Math.max(1, Math.min(14, Number($("d-count").value) || 1));
+      const start = $("d-start").value || "09:00", end = $("d-end").value || "19:00";
+      if (toMin(end) <= toMin(start) + 60) return toast("Make the end time at least an hour after the start.");
+      state.editingDays = false;
+      buildDays(count, start, end);
+      renderMarkers(); updateHeader(); showPlan();
+      const left = state.trip.days.leftover.length;
+      return toast(`Planned ${count} day${count > 1 ? "s" : ""} ✨${left ? ` · ${left} spot${left > 1 ? "s" : ""} didn't fit` : ""}`);
+    }
     if (e.target.id === "post-form") {
       const spot = spotById(state.selected);
       const post = parseShared($("post-link").value);
@@ -1384,6 +1584,15 @@
     }
     if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
     if (t.id === "btn-popular") return addPopularSpots(false);
+    if (d.day !== undefined) return selectDay(Number(d.day));
+    if (t.id === "days-edit") { state.editingDays = true; return showPlan(); }
+    if (t.id === "days-cancel") { state.editingDays = false; return showPlan(); }
+    if (t.id === "days-rebuild") {
+      const dd = state.trip.days;
+      buildDays(dd.count, dd.start, dd.end);
+      renderMarkers(); updateHeader(); showPlan();
+      return toast("Days rebuilt ✨");
+    }
     if (d.rn !== undefined) {
       const term = state.rnTerms[Number(d.rn)];
       navigator.clipboard?.writeText(term).catch(() => {});

@@ -13,10 +13,11 @@
   const GUIDE_SCHEMA = {
     type: "object",
     additionalProperties: false,
-    required: ["summary", "shot_type", "camera", "composition", "lighting", "pose", "photographer_steps", "edit_tips", "pro_tip"],
+    required: ["summary", "shot_type", "where_to_stand", "camera", "composition", "lighting", "pose", "photographer_steps", "edit_tips", "pro_tip"],
     properties: {
       summary: { type: "string" },
       shot_type: { type: "string" },
+      where_to_stand: { type: "string" },
       camera: {
         type: "object",
         additionalProperties: false,
@@ -43,6 +44,7 @@
   const SYSTEM = `You are a friendly travel photographer who coaches people to recreate photos they have seen online, using only a phone camera.
 
 Study the inspiration photo and explain exactly how to take it again. Be concrete and practical:
+- Where to stand: the exact spot at the named place that gives the same background (which side, step or corner, which direction to face, which landmarks line up behind the subject). If the photo seems to be from elsewhere, say so and give the closest-looking background at this place.
 - Lens: name the phone zoom button to use (0.5x ultra-wide, 1x main, 2x, 3x or 5x telephoto) and why. Long-lens looks (compressed background, big landmark behind a person) usually mean stepping back and zooming in.
 - Camera height and angle: e.g. "phone at knee height, tilted slightly up", "chest height, level".
 - Distance between photographer and subject, and between subject and background.
@@ -127,25 +129,26 @@ Keep every item short enough to read at a glance while standing at the spot.`;
 
   // Free mode: a ready-made question for the free Claude app (claude.ai),
   // which the user sends together with the photo themselves.
-  function freePrompt({ spotName, cityName, bestTime }) {
+  function freePrompt({ spotName, cityName, bestTime, address, lat, lng }) {
+    const where = spotName ? `${spotName}${cityName ? ` in ${cityName}` : ""}` : cityName;
     return [
       "I want to recreate the travel photo I've attached, using only my phone camera.",
-      spotName && `I'll be at ${spotName}${cityName ? ` in ${cityName}` : ""}.`,
+      where && `I'll be at ${where}${address ? ` (${address})` : ""}${Number.isFinite(lat) ? `, around ${lat.toFixed(5)}, ${lng.toFixed(5)}` : ""}.`,
       bestTime && `Local tip for this spot: ${bestTime}.`,
       "",
       "Please study the photo and give me short, practical steps I can read while standing at the spot:",
-      "1. Lens: which zoom button to use (0.5x, 1x, 2x, 3x or 5x) and why.",
-      "2. Phone height and angle (e.g. knee height, tilted slightly up), orientation, and camera mode (Photo, Portrait, Live, burst, timer).",
-      "3. Distance between the photographer and me, and between me and the background.",
-      "4. Phone settings: grid, where to tap to focus, exposure, focus/exposure lock.",
-      "5. Composition: where I sit in the frame, leading lines, how much sky.",
-      "6. Light: best time of day and where the light should come from.",
-      "7. Pose: body position, hands, where to look, how to move.",
+      "1. Where to stand: the exact spot to get the same background (which side of the square/building/bridge, which step or corner, which direction to face, and which landmarks should line up behind me). If this photo was taken somewhere else, say so and tell me where at this place I can get the closest-looking background.",
+      "2. Where the photographer stands: distance from me, and how far I should be from the background.",
+      "3. Pose: body position, hands, where to look, how to move, and 2 variations to try.",
+      "4. Lens: which zoom button to use (0.5x, 1x, 2x, 3x or 5x) and why.",
+      "5. Phone height and angle (e.g. knee height, tilted slightly up), orientation, and camera mode (Photo, Portrait, Live, burst, timer).",
+      "6. Phone settings: grid, where to tap to focus, exposure, focus/exposure lock.",
+      "7. Light: best time of day and where the light should come from.",
       "8. A short numbered checklist for the friend holding the phone.",
       "9. Simple edits to match the look.",
       "",
       "Describe poses and outfits generally; don't try to identify the person in the photo.",
-    ].filter((line) => line !== false && line !== undefined && line !== null).join("\n");
+    ].filter((line) => typeof line === "string").join("\n");
   }
 
   window.WPAI = { photoGuide, freePrompt };

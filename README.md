@@ -7,6 +7,8 @@ home with the photos they had in mind.
 
 - **Free by default.** No API keys or payment needed: OpenStreetMap map and search, Wikipedia photos, and the AI photo coach through the free Claude app.
 - **Ready-made trips:** Brussels, Bruges, Ghent, Paris, Amsterdam and Luxembourg come with popular photo spots, best-light tips and pose ideas. Tap the city name in the top bar to switch.
+- **📅 Day-by-day plan.** Tell the app how many days and your hours (set per trip); it splits your saved spots into balanced days by area, orders each day as a walking route from your start point, and gives every stop a time slot, with a lunch break when needed. Each day shows its date (from your itinerary), sunrise, sunset and golden-light times. The pose photos you saved appear on each stop.
+- **📍 Where to stand & how to pose.** For any pose photo, the free Claude app explains exactly where to stand at that spot to get the same (or closest) background, where the photographer stands, how to pose, and the camera settings.
 - **🗺️ Multi-city itinerary.** Under the city name → **My itinerary**, list the cities in order (e.g. Brussels, 2 nights → Bruges, day trip → Ghent, 1 night). Set a start date and each stay gets its dates. Between cities the app suggests **trains and buses** for your travel day (which train, platform-to-platform times, changes), with a Google Maps link as backup. The map shows the whole route, and **Open city** jumps into that city's day plan.
 - **Any other city.** Search for a city and the app automatically adds its most popular spots: nearby Wikipedia landmarks ranked by how many people read about them, with OpenStreetMap as a backup. **✨ Find popular spots** tops up any trip.
 - **Your own pins.** Use **📍 Drop pin** on the map, or **＋ Spot** to search for a place. Delete any pin with 🗑, either in the list or on the spot itself.
@@ -56,6 +58,7 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | `places.js` | City and place search (Google Places or OpenStreetMap) |
 | `ai.js` | AI photo coach (Claude API) |
 | `transit.js` | Bus, tram and metro routes (Transitous) |
+| `sun.js` | Sunrise, sunset and golden-hour times (computed on the device) |
 | `data.js` | Brussels starter spots and categories |
 | `vendor/leaflet/` | [Leaflet](https://leafletjs.com) 1.9.4 map library (BSD-2) |
 

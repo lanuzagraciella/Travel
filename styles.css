@@ -160,6 +160,18 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .stops > li.travel-leg { background: #faf6f8; }
 .linkish { background: none; border: 0; padding: 0; color: var(--plum); font-weight: 600; text-decoration: underline; font-size: inherit; }
 .form select { width: auto; flex: 1; min-width: 0; }
+.rednote h3 { color: #ff2442; }
+.terms { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.term {
+  border: 1px solid #ffc2cb; background: #fff1f3; color: #c4142f; border-radius: 999px;
+  padding: 5px 11px; font-size: 13px; font-weight: 600;
+}
+.term:hover { background: #ffe1e6; }
+.posts-title { margin: 12px 0 4px; font-size: 13px; }
+.posts li { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.posts a { flex: 1; min-width: 0; color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.posts a:hover { text-decoration: underline; }
+.post-site { font-size: 11px; font-weight: 700; color: #fff; background: #ff2442; border-radius: 4px; padding: 1px 5px; margin-right: 4px; }
 .verdict { font-size: 13px; margin: 6px 0; }
 .verdict.good { color: var(--ok); font-weight: 600; }
 .route { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 8px 0; background: #fff; }

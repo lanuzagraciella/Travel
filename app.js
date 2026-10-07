@@ -411,6 +411,94 @@
     );
   }
 
+  // ----- RedNote (小红书) -----
+  // RedNote has no public API, so the app links into RedNote searches (in
+  // Chinese, the way its users write) and keeps the posts you save.
+  const rednoteUrl = (q) => `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(q)}`;
+
+  function rednoteTerms(spot) {
+    const zh = spot.zh;
+    const city = state.trip.zh || state.trip.name;
+    const base = zh || `${city} ${spot.name}`;
+    return [`${base} 机位`, `${base} 拍照姿势`, `${base} 拍照`, `${spot.name} photo spot`];
+  }
+
+  function postSite(url) {
+    let host = "";
+    try { host = new URL(url).hostname.replace(/^www\./, ""); } catch { /* not a URL */ }
+    if (/xhslink|xiaohongshu/.test(host)) return "RedNote";
+    if (/instagram/.test(host)) return "Instagram";
+    if (/pinterest|pin\.it/.test(host)) return "Pinterest";
+    if (/tiktok/.test(host)) return "TikTok";
+    return host || "Link";
+  }
+
+  // Turn pasted share text into { url, title }. RedNote's share text looks like
+  // "… 发布了一篇小红书笔记，快来看吧！ 😆 code 😆 http://xhslink.com/a/x，复制本条信息，打开【小红书】App查看精彩内容！"
+  function parseShared(text) {
+    const url = (text.match(/https?:\/\/[^\s，。！!）)"'】]+/) || [])[0];
+    if (!url) return null;
+    const bracketed = [...text.matchAll(/【([^】]+)】/g)].map((m) => m[1]).filter((t) => !/小红书/.test(t));
+    const author = (text.match(/^\s*(?:\d+\s*)?(.+?)发布了一篇小红书笔记/) || [])[1];
+    let title = bracketed[0] || (author && `Post by ${author.trim()}`) || text.slice(0, text.indexOf(url))
+      .replace(/😆[^😆]*😆/gu, "")
+      .replace(/发布了一篇小红书笔记，快来看吧！?/, "")
+      .replace(/^\s*\d+\s*/, "")
+      .replace(/\s+/g, " ").trim();
+    if (!title) title = `${postSite(url)} post`;
+    return { url, title: title.slice(0, 90) };
+  }
+
+  function rednoteHtml(spot) {
+    const terms = rednoteTerms(spot);
+    state.rnTerms = terms;
+    const posts = spot.posts || [];
+    return `<div class="section rednote" id="rednote">
+      <h3>📕 Ideas on RedNote</h3>
+      <p class="hint">RedNote (小红书) users share the best camera spots (机位), poses and angles. Tap a search to open it in RedNote${spot.zh ? ` · Chinese name: <b>${esc(spot.zh)}</b>` : ""}.</p>
+      <div class="terms">${terms.map((t, i) => `<button class="term" data-rn="${i}">${esc(t)}</button>`).join("")}</div>
+      ${posts.length ? `<h4 class="posts-title">Saved posts</h4><ul class="plain posts">${posts.map((p, i) => `
+        <li><a href="${esc(p.url)}" target="_blank" rel="noopener"><span class="post-site">${esc(p.site)}</span> ${esc(p.title)}</a>
+          <button class="mini" data-delpost="${i}" aria-label="Remove saved post">✕</button></li>`).join("")}</ul>` : ""}
+      <form class="search-row" id="post-form" style="margin-top:10px">
+        <input id="post-link" placeholder="Paste a RedNote (or Instagram) share link" autocomplete="off" />
+        <button class="btn" type="submit">Save</button>
+      </form>
+      <p class="hint">In RedNote tap Share → Copy link, then paste it here. Love a photo? Screenshot it, add it to <b>Pose inspiration</b> above and tap ✨ for camera directions.</p>
+    </div>`;
+  }
+
+  const zhLoading = new Set();   // trip and spot ids with a lookup in flight
+
+  // Look up Chinese names once per spot (and per city), then refresh the section.
+  async function ensureChinese(spot) {
+    const trip = state.trip;
+    const jobs = [];
+    if (trip.zh === undefined) jobs.push(ensureCityChinese());
+    if (spot.zh === undefined && spot.wiki && !zhLoading.has(spot.id)) {
+      zhLoading.add(spot.id);
+      jobs.push(window.WPPlaces.chineseName(spot.wiki).then((z) => { spot.zh = z; }).finally(() => zhLoading.delete(spot.id)));
+    }
+    if (!jobs.length) return;
+    const results = await Promise.allSettled(jobs);
+    if (results.some((r) => r.status === "fulfilled")) save();
+    const box = $("rednote");
+    if (box && state.selected === spot.id) box.outerHTML = rednoteHtml(spot);
+  }
+
+  async function ensureCityChinese() {
+    const trip = state.trip;
+    if (trip.zh !== undefined || zhLoading.has(trip.id)) return;
+    zhLoading.add(trip.id);
+    try {
+      trip.zh = await window.WPPlaces.chineseName(trip.wiki || `en:${trip.name}`);
+      save();
+      if (state.view === "plan" && state.trip === trip) showPlan(false);
+    } catch { /* offline: try again next time */ } finally {
+      zhLoading.delete(trip.id);
+    }
+  }
+
   // ----- Getting around: walking + bus/tram/metro -----
   const LONG_WALK_MIN = 15;
   state.legs = {};
@@ -500,6 +588,7 @@
 
   // ----- My day -----
   function showPlan(open = true) {
+    ensureCityChinese();
     state.view = "plan";
     state.selected = null;
     setHeading(`My day in ${state.trip.name}`, false);
@@ -543,6 +632,7 @@
           <button class="btn" id="btn-find">🔍 Add spots</button>
           <button class="btn" id="btn-drop-pin">📍 Drop a pin</button>
           <button class="btn" id="btn-popular">✨ Find popular spots</button>
+          <a class="btn" target="_blank" rel="noopener" href="${rednoteUrl(`${state.trip.zh || state.trip.name} 拍照机位`)}">📕 ${esc(state.trip.name)} on RedNote</a>
         </div>
       </div>
       ${stops.length ? `<ul class="plain stops">${rows}</ul>`
@@ -597,8 +687,9 @@
       <div class="section">
         <h3>Pose inspiration</h3>
         <div class="gallery" id="gallery"></div>
-        <p class="hint">Save photos you love from Instagram or Pinterest and upload them here. Tap one, then <b>✨ How do I take this?</b> for step-by-step phone camera directions.</p>
+        <p class="hint">Save photos you love from RedNote, Instagram or Pinterest and upload them here. Tap one, then <b>✨ How do I take this?</b> for step-by-step phone camera directions.</p>
       </div>
+      ${rednoteHtml(spot)}
       ${spot.poses?.length ? `<div class="section"><h3>Shot ideas</h3><ul class="plain poses">${spot.poses.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
       ${gettingHereHtml(spot)}
       ${nearby.length ? `<div class="section">
@@ -612,6 +703,7 @@
     if (pan) map.panTo(spot.lat, spot.lng, PHONE() ? (window.innerHeight * 0.58) / 2 : 0);
 
     renderGallery(id);
+    ensureChinese(spot);
 
     // Pull Google details for spots that don't have them yet (once per spot).
     if (await window.WPPlaces.enrichFromGoogle(spot, state.trip.name)) {
@@ -1230,6 +1322,16 @@
     if (e.target.id === "search-form") return runSearch($("q").value);
     if (e.target.id === "city-form") return findCities($("city-q").value);
     if (e.target.id === "start-form") return findStart($("start-q").value);
+    if (e.target.id === "post-form") {
+      const spot = spotById(state.selected);
+      const post = parseShared($("post-link").value);
+      if (!spot) return;
+      if (!post) return toast("Paste a link that starts with http, e.g. from RedNote's Share → Copy link.");
+      spot.posts = [...(spot.posts || []), { ...post, site: postSite(post.url), addedAt: Date.now() }];
+      save();
+      $("rednote").outerHTML = rednoteHtml(spot);
+      return toast("Post saved to this spot ✓");
+    }
     if (e.target.id === "stay-form") {
       itinerary.stays = stays();
       itinerary.stays.push({ id: uid("s-"), tripId: $("stay-city").value, nights: Number($("stay-nights").value) });
@@ -1260,6 +1362,19 @@
     }
     if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
     if (t.id === "btn-popular") return addPopularSpots(false);
+    if (d.rn !== undefined) {
+      const term = state.rnTerms[Number(d.rn)];
+      navigator.clipboard?.writeText(term).catch(() => {});
+      window.open(rednoteUrl(term), "_blank", "noopener");
+      return toast(`Copied “${term}”. If RedNote opens without results, paste it into its search.`, 6000);
+    }
+    if (d.delpost !== undefined) {
+      const spot = spotById(state.selected);
+      spot.posts.splice(Number(d.delpost), 1);
+      save();
+      $("rednote").outerHTML = rednoteHtml(spot);
+      return;
+    }
     if (t.id === "start-locate") return locateStart();
     if (t.id === "start-pick") { setAdding("start"); if (PHONE()) setPanel("closed"); return; }
     if (t.id === "start-change") { state.editingStart = true; return showPlan(); }

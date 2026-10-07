@@ -309,5 +309,36 @@ out center tags;`;
     return found.slice(0, 12);
   }
 
-  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots };
+  // Chinese name of a place, from Wikipedia's language links, shown in
+  // Simplified Chinese because that's what RedNote (小红书) users search with.
+  // `wiki` is "Title" (English Wikipedia) or "lang:Title".
+  async function chineseName(wiki) {
+    if (!wiki) return null;
+    const m = /^([a-z]{2,3}):(.+)$/.exec(wiki);
+    const [lang, title] = m ? [m[1], m[2]] : ["en", wiki];
+    let zh = lang === "zh" ? title : null;
+    if (!zh) {
+      const q = new URLSearchParams({
+        action: "query", format: "json", formatversion: "2", origin: "*",
+        titles: title.replace(/_/g, " "), prop: "langlinks", lllang: "zh", redirects: "1",
+      });
+      const r = await fetch(`https://${lang}.wikipedia.org/w/api.php?${q}`);
+      if (!r.ok) throw new Error("Wikipedia is unavailable");
+      zh = (await r.json()).query?.pages?.[0]?.langlinks?.[0]?.title;
+      if (!zh) return null;
+    }
+    try {
+      const q = new URLSearchParams({
+        action: "parse", format: "json", formatversion: "2", origin: "*",
+        page: zh, prop: "displaytitle", variant: "zh-cn", redirects: "1",
+      });
+      const r = await fetch(`https://zh.wikipedia.org/w/api.php?${q}`);
+      const shown = r.ok && (await r.json()).parse?.displaytitle;
+      const clean = shown && shown.replace(/<[^>]+>/g, "").trim();
+      if (clean) return clean;
+    } catch { /* fall back to the title as stored */ }
+    return zh;
+  }
+
+  window.WPPlaces = { searchPlaces, placeById, searchCities, enrichFromGoogle, popularSpots, chineseName };
 })();

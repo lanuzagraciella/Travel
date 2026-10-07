@@ -8,11 +8,11 @@ window.SEED_CITY = {
 };
 
 window.CATEGORIES = {
-  sight: { label: "Sight", color: "#2a7de1", emoji: "🏛️" },
-  photo: { label: "Photo spot", color: "#9b2fae", emoji: "📸" },
-  food: { label: "Food & drink", color: "#f2b705", emoji: "🧇" },
-  shop: { label: "Shopping", color: "#1e9e6a", emoji: "🛍️" },
-  stay: { label: "Hotel", color: "#e04848", emoji: "🛏️" },
+  sight: { label: "Sight", color: "#007AFF", emoji: "🏛️" },
+  photo: { label: "Photo spot", color: "#AF52DE", emoji: "📸" },
+  food: { label: "Food & drink", color: "#FF9500", emoji: "🧇" },
+  shop: { label: "Shopping", color: "#34C759", emoji: "🛍️" },
+  stay: { label: "Hotel", color: "#FF3B30", emoji: "🛏️" },
 };
 
 window.SEED_SPOTS = [

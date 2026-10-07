@@ -50,7 +50,7 @@
       setRoute(points) {
         route?.remove();
         route = points.length > 1
-          ? L.polyline(points.map((p) => [p.lat, p.lng]), { color: "#2a7de1", weight: 5, opacity: 0.8, dashArray: "1 9", lineCap: "round" }).addTo(map)
+          ? L.polyline(points.map((p) => [p.lat, p.lng]), { color: "#007aff", weight: 5, opacity: 0.8, dashArray: "1 9", lineCap: "round" }).addTo(map)
           : null;
       },
       fitPoints(points, bottomPad = 40) {
@@ -130,7 +130,7 @@
           map,
           path: points.map((p) => ({ lat: p.lat, lng: p.lng })),
           strokeOpacity: 0,
-          icons: [{ icon: { path: g.SymbolPath.CIRCLE, scale: 2.5, fillColor: "#2a7de1", fillOpacity: 0.9, strokeOpacity: 0 }, offset: "0", repeat: "11px" }],
+          icons: [{ icon: { path: g.SymbolPath.CIRCLE, scale: 2.5, fillColor: "#007aff", fillOpacity: 0.9, strokeOpacity: 0 }, offset: "0", repeat: "11px" }],
         });
       },
       fitPoints(points, bottomPad = 40) {

@@ -52,13 +52,14 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | File | What it is |
 | --- | --- |
 | `index.html` | Page layout |
-| `styles.css` | Look and feel, including the mobile bottom sheet |
+| `styles.css` | Apple-style look (system colours, materials, inset-grouped lists, light and dark mode), including the mobile bottom sheet |
 | `app.js` | Trips, panel, gallery, route optimizer, storage |
 | `maps.js` | Google Maps and OpenStreetMap map layers |
 | `places.js` | City and place search (Google Places or OpenStreetMap) |
 | `ai.js` | AI photo coach (Claude API) |
 | `transit.js` | Bus, tram and metro routes (Transitous) |
 | `sun.js` | Sunrise, sunset and golden-hour times (computed on the device) |
+| `icons.js` | Line icons in the style of SF Symbols |
 | `data.js` | Brussels starter spots and categories |
 | `vendor/leaflet/` | [Leaflet](https://leafletjs.com) 1.9.4 map library (BSD-2) |
 

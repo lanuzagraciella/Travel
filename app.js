@@ -262,7 +262,7 @@
     if (start) {
       pins.push({
         lat: start.lat, lng: start.lng, title: `Start: ${start.name}`,
-        label: "🏁", color: "#23161f", selected: false, done: false, showName: showNames,
+        label: "🏁", color: "#1c1c1e", selected: false, done: false, showName: showNames,
         onClick: () => { showPlan(); renderMarkers(); },
       });
     }
@@ -294,7 +294,7 @@
     const inPlan = plan().length;
     const got = plan().filter(isDone).length;
     $("progress-bar").style.width = inPlan ? `${(got / inPlan) * 100}%` : "0";
-    $("progress-text").textContent = inPlan ? `📸 ${got} of ${inPlan} spots photographed` : "Plan your spots and your shots";
+    $("progress-text").textContent = inPlan ? `${got} of ${inPlan} shots taken` : "Plan your spots and your shots";
   }
 
   function rerender() {
@@ -310,7 +310,7 @@
   async function addPopularSpots(toPlan) {
     const trip = state.trip;
     const btn = $("btn-popular");
-    if (btn) { btn.disabled = true; btn.textContent = "✨ Finding spots…"; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `${ICON("sparkles")} Finding spots…`; }
     toast(`Finding popular photo spots in ${trip.name}…`, 15000);
     try {
       const center = { lat: trip.center[0], lng: trip.center[1] };
@@ -334,7 +334,7 @@
       toast(err.message || "Couldn't load popular spots right now.");
     } finally {
       const b = $("btn-popular");
-      if (b) { b.disabled = false; b.textContent = "✨ Find popular spots"; }
+      if (b) { b.disabled = false; b.innerHTML = `${ICON("star")} Popular spots`; }
     }
   }
 
@@ -345,16 +345,16 @@
         <div class="start-row"><span class="stop-letter start-letter">🏁</span>
           <span class="stop-main"><div class="stop-name">Start: ${esc(start.name)}</div>
             <div class="stop-meta">Your tour is ordered from here</div></span>
-          <button class="mini" id="start-change">Change</button>
-          <button class="mini" id="start-clear" title="Remove start point" aria-label="Remove start point">✕</button></div>
+          <button class="mini text" id="start-change">Change</button>
+          <button class="mini" id="start-clear" title="Remove start point" aria-label="Remove start point">${ICON("xmark")}</button></div>
       </div>`;
     }
     return `<form class="section form start-box" id="start-form">
-      <h3>🏁 Where do you start?</h3>
+      <h3>Where do you start?</h3>
       <p class="hint">Your hotel, the station, or where you are now. The app orders your stops into the shortest walking tour from there.</p>
       <div class="actions" style="margin-top:4px">
-        <button class="btn" type="button" id="start-locate">📍 My location</button>
-        <button class="btn" type="button" id="start-pick">Tap on map</button>
+        <button class="btn" type="button" id="start-locate">${ICON("location")} My location</button>
+        <button class="btn" type="button" id="start-pick">${ICON("pin")} Tap on map</button>
         ${start ? `<button class="btn" type="button" id="start-cancel">Cancel</button>` : ""}
       </div>
       <div class="search-row" style="margin-top:10px">
@@ -397,7 +397,7 @@
       toast(err.message || "Search failed");
     }
     el.innerHTML = state.startResults.length
-      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#23161f"></span>
+      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#1c1c1e"></span>
           <span class="stop-main"><div class="stop-name">${esc(r.name)}</div><div class="stop-meta">${esc(r.address)}</div></span>
           <button class="mini" data-startresult="${i}">Start here</button></li>`).join("")
       : `<li class="empty">Nothing found. Try “Tap on map” instead.</li>`;
@@ -461,12 +461,12 @@
     state.rnTerms = terms;
     const posts = spot.posts || [];
     return `<div class="section rednote" id="rednote">
-      <h3>📕 Ideas on RedNote</h3>
+      <h3>Ideas on RedNote</h3>
       <p class="hint">RedNote (小红书) users share the best camera spots (机位), poses and angles. Tap a search to open it in RedNote${spot.zh ? ` · Chinese name: <b>${esc(spot.zh)}</b>` : ""}.</p>
       <div class="terms">${terms.map((t, i) => `<button class="term" data-rn="${i}">${esc(t)}</button>`).join("")}</div>
       ${posts.length ? `<h4 class="posts-title">Saved posts</h4><ul class="plain posts">${posts.map((p, i) => `
         <li><a href="${esc(p.url)}" target="_blank" rel="noopener"><span class="post-site">${esc(p.site)}</span> ${esc(p.title)}</a>
-          <button class="mini" data-delpost="${i}" aria-label="Remove saved post">✕</button></li>`).join("")}</ul>` : ""}
+          <button class="mini" data-delpost="${i}" aria-label="Remove saved post">${ICON("xmark")}</button></li>`).join("")}</ul>` : ""}
       <form class="search-row" id="post-form" style="margin-top:10px">
         <input id="post-link" placeholder="Paste a RedNote (or Instagram) share link" autocomplete="off" />
         <button class="btn" type="submit">Save</button>
@@ -530,8 +530,8 @@
     state.legs[key] = { from, to };
     const mins = walkMin(from, to);
     const long = mins >= LONG_WALK_MIN;
-    return `<li class="leg"><span>↓ 🚶 ${mins} min walk</span>
-        <button class="leg-btn ${long ? "hot" : ""}" data-leg="${key}">${long ? "🚌 Long walk? See bus & tram" : "🚌 Transit"}</button></li>
+    return `<li class="leg"><span>${ICON("walk")} ${mins} min walk</span>
+        <button class="leg-btn ${long ? "hot" : ""}" data-leg="${key}">${ICON("bus")} ${long ? "Long walk? Bus & tram" : "Transit"}</button></li>
       <li class="leg-detail" id="leg-${key}" hidden></li>`;
   }
 
@@ -547,8 +547,8 @@
       <h3>Getting here</h3>
       <p>From <b>${esc(from.name)}</b>: 🚶 ${mins} min walk (${fmtDist(meters(from, spot) * DETOUR)})</p>
       <div class="actions">
-        <button class="btn ${mins >= LONG_WALK_MIN ? "primary" : ""}" data-leg="${key}">🚌 Bus, tram &amp; metro options</button>
-        <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([from, spot])}">🚶 Walking directions</a>
+        <button class="btn ${mins >= LONG_WALK_MIN ? "primary" : ""}" data-leg="${key}">${ICON("bus")} Bus, tram &amp; metro</button>
+        <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([from, spot])}">${ICON("walk")} Walking directions</a>
       </div>
       <div class="leg-detail" id="leg-${key}" hidden></div>
     </div>`;
@@ -740,14 +740,14 @@
     const d = trip.days;
     if (!d || state.editingDays) {
       return `<form class="section form days-box" id="days-form">
-        <h3>📅 Plan my days</h3>
+        <h3>Plan my days</h3>
         <p class="hint">The app splits your ${spots().length} saved spots into days by area, in walking order, with times for each stop and a lunch break.</p>
         <div class="days-row">
           <label>Days<input id="d-count" type="number" min="1" max="14" value="${d?.count || defaultDayCount()}" /></label>
           <label>Start<input id="d-start" type="time" value="${esc(d?.start || "09:00")}" /></label>
           <label>End<input id="d-end" type="time" value="${esc(d?.end || "19:00")}" /></label>
         </div>
-        <div class="actions"><button class="btn primary" type="submit">📅 Build my days</button>
+        <div class="actions"><button class="btn primary" type="submit">${ICON("calendar")} Build my days</button>
           ${d ? `<button class="btn" type="button" id="days-cancel">Cancel</button>` : ""}</div>
       </form>`;
     }
@@ -761,7 +761,7 @@
       <p class="day-line"><b>${date ? fmtDay(date) : `Day ${d.current + 1}`}</b> · ${esc(d.start)}–${esc(d.end)} · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs late</span>` : ""}</p>
       <p class="hint">🌅 Sunrise ${t(sun.sunrise)}, golden light until ${t(sun.goldenMorningEnd)} · 🌇 golden light from ${t(sun.goldenEveningStart)}, sunset ${t(sun.sunset)}${date ? "" : " (today)"}</p>
       ${d.leftover.length ? `<p class="hint">⚠️ ${d.leftover.length} spot${d.leftover.length > 1 ? "s" : ""} didn't fit: add a day, longer hours, or drop some. They're listed at the bottom.</p>` : ""}
-      <div class="actions"><button class="btn small" id="days-edit">Change days or hours</button><button class="btn small" id="days-rebuild">↻ Rebuild</button></div>
+      <div class="actions"><button class="btn small" id="days-edit">${ICON("clock")} Days &amp; hours</button><button class="btn small" id="days-rebuild">${ICON("refresh")} Rebuild</button></div>
     </div>`;
   }
 
@@ -806,13 +806,13 @@
       return `${leg}${lunch ? `<li class="leg lunch">🍽️ ${fmtClock(lunch.at)} Lunch break (1 h)</li>` : ""}<li data-id="${esc(s.id)}">
         <span class="stop-letter" style="background:${cat.color}">${LETTERS[i] || "•"}</span>
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
-          <div class="stop-meta">${time ? `🕘 <b>${fmtClock(time.arrive)}–${fmtClock(time.leave)}</b> · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
+          <div class="stop-meta">${time ? `<b class="time">${fmtClock(time.arrive)}–${fmtClock(time.leave)}</b> · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
           <div class="row-poses" data-poses="${esc(s.id)}"></div></span>
-        <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">▲</button>
-        <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">▼</button>
-        <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">📕</a>
-        <button class="mini" data-remove="${esc(s.id)}" title="Take out of today's plan (keeps the pin)" aria-label="Take out of today's plan">✕</button>
-        <button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button>
+        <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">${ICON("up")}</button>
+        <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">${ICON("down")}</button>
+        <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">${ICON("book")}</a>
+        <button class="mini" data-remove="${esc(s.id)}" title="Take out of today's plan (keeps the pin)" aria-label="Take out of today's plan">${ICON("minus")}</button>
+        <button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">${ICON("trash")}</button>
       </li>`;
     }).join("");
 
@@ -832,18 +832,18 @@
           return long ? `<p class="hint">🚌 ${long} long walk${long > 1 ? "s" : ""} in this tour. Tap the yellow buttons for bus, tram and metro options.</p>` : "";
         })()}
         <div class="actions">
-          ${stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize">✨ Optimize route</button>` : ""}
-          ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">Walk it in Google Maps</a>` : ""}
-          <button class="btn" id="btn-find">🔍 Add spots</button>
-          <button class="btn" id="btn-drop-pin">📍 Drop a pin</button>
-          <button class="btn" id="btn-popular">✨ Find popular spots</button>
+          ${stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize">${ICON("sparkles")} Optimize</button>` : ""}
+          ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">${ICON("walk")} Walk in Google Maps</a>` : ""}
+          <button class="btn" id="btn-find">${ICON("search")} Add spots</button>
+          <button class="btn" id="btn-drop-pin">${ICON("pin")} Drop a pin</button>
+          <button class="btn" id="btn-popular">${ICON("star")} Popular spots</button>
         </div>
       </div>
       ${stops.length ? `<ul class="plain stops">${rows}</ul>`
         : `<p class="empty">Your day is empty. Search for places with “🔍 Add spots” or tap “📍 Drop a pin”${map?.kind === "google" ? ", or tap any place on the map" : ""}.</p>`}
       ${unplanned.length ? `<div class="section"><h3>${days ? (days.leftover.length ? "Didn't fit / not in any day" : "Not in any day") : "Saved, not in today's plan"}</h3><ul class="plain nearby">
         ${unplanned.map((s) => `<li data-id="${esc(s.id)}"><span class="dot" style="background:${(CATS[s.category] || CATS.sight).color}"></span>
-          <span class="nearby-name">${esc(s.name)}</span><button class="mini" data-addplan="${esc(s.id)}">＋ Add</button><button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">🗑</button></li>`).join("")}
+          <span class="nearby-name">${esc(s.name)}</span><button class="mini text" data-addplan="${esc(s.id)}">${ICON("plus")} Add</button><button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">${ICON("trash")}</button></li>`).join("")}
       </ul></div>` : ""}`;
     if (open) openPanel();
     fillRowPoses();
@@ -882,18 +882,18 @@
         ${detailsHtml(spot)}
         ${spot.bestTime ? `<p>🕒 <b>Best light:</b> ${esc(spot.bestTime)}</p>` : ""}
         <div class="actions">
-          <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">📕 ${esc(spot.name)} on RedNote</a>
-          <button class="btn ${inPlan ? "" : "primary"}" id="btn-toggle-plan">${inPlan ? "✓ In my day" : "＋ Add to my day"}</button>
-          <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([spot])}">Directions</a>
-          <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(spot)}">Open in Google Maps</a>
+          <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">${ICON("book")} Ideas on RedNote</a>
+          <button class="btn ${inPlan ? "" : "primary"}" id="btn-toggle-plan">${inPlan ? `${ICON("check")} In my day` : `${ICON("plus")} Add to my day`}</button>
+          <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([spot])}">${ICON("directions")} Directions</a>
+          <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(spot)}">${ICON("map")} Google Maps</a>
           <label class="btn check"><input type="checkbox" id="chk-done" ${isDone(id) ? "checked" : ""}/> Got my shot</label>
-          <button class="btn danger" id="btn-delete-spot">🗑 Delete pin</button>
+          <button class="btn danger" id="btn-delete-spot">${ICON("trash")} Delete pin</button>
         </div>
       </div>
       <div class="section">
         <h3>Pose inspiration</h3>
         <div class="gallery" id="gallery"></div>
-        <p class="hint">Save photos you love from RedNote, Instagram or Pinterest and upload them here. Tap one, then <b>✨ How do I take this?</b> for step-by-step phone camera directions.</p>
+        <p class="hint">Save photos you love from RedNote, Instagram or Pinterest and upload them here. Tap one, then <b>Where to stand &amp; how to pose</b>.</p>
       </div>
       ${rednoteHtml(spot)}
       ${spot.poses?.length ? `<div class="section"><h3>Shot ideas</h3><ul class="plain poses">${spot.poses.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
@@ -954,9 +954,9 @@
         <img src="${urlFor(p)}" alt="Pose inspiration ${i + 1}" loading="lazy" />
         ${p.recreated ? `<span class="badge">✓ Recreated</span>` : ""}
         ${p.guide || p.notes ? `<span class="badge ai">✨ Guide</span>` : ""}
-        <button class="del" data-del="${esc(p.id)}" aria-label="Delete photo">✕</button>
+        <button class="del" data-del="${esc(p.id)}" aria-label="Delete photo">${ICON("xmark")}</button>
       </div>`).join("") +
-      `<button class="thumb add" id="btn-upload">＋<br/>Add inspo photos</button>`;
+      `<button class="thumb add" id="btn-upload">${ICON("camera")}<span>Add pose photos</span></button>`;
     state.lightbox.photos = photos;
   }
 
@@ -977,7 +977,7 @@
         <p class="hint">${google
           ? "Results come from Google Maps. You can also tap any place on the map to add it."
           : "Results come from OpenStreetMap (free)."}</p>
-        <div class="actions"><button class="btn" type="button" id="btn-drop-pin">📍 Drop a pin on the map instead</button></div>
+        <div class="actions"><button class="btn" type="button" id="btn-drop-pin">${ICON("pin")} Drop a pin on the map instead</button></div>
       </form>
       <ul class="plain results" id="results"></ul>`;
     openPanel();
@@ -996,7 +996,7 @@
           <span class="dot" style="background:${cat.color}"></span>
           <span class="stop-main"><div class="stop-name">${esc(r.name)}</div>
             <div class="stop-meta">${r.rating ? `⭐ ${r.rating.toFixed(1)} · ` : ""}${esc(r.address)}</div></span>
-          ${saved ? `<span class="muted">Saved</span>` : `<button class="mini" data-quickadd="${i}">＋ Add</button>`}
+          ${saved ? `<span class="muted">Saved</span>` : `<button class="mini text" data-quickadd="${i}">${ICON("plus")} Add</button>`}
         </li>`;
       }).join("")
       : `<li class="empty">No places found. Try a different name.</li>`;
@@ -1053,7 +1053,7 @@
         <span class="chip">${cat.emoji} ${cat.label}</span>
         ${detailsHtml(place)}
         <div class="actions">
-          <button class="btn primary" id="btn-add-candidate">＋ Add to my day</button>
+          <button class="btn primary" id="btn-add-candidate">${ICON("plus")} Add to my day</button>
           <button class="btn" id="btn-save-candidate">Save for later</button>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(place)}">Open in Google Maps</a>
         </div>
@@ -1150,24 +1150,24 @@
         const when = d ? new Date(d.arrive.getTime() - 3 * 3600000) : null; // 9:00 on travel day
         state.legs[key] = { from, to, when, intercity: true };
         travel = `<li class="leg travel-leg"><span>↓ 🚆 ${esc(prev.name)} → ${esc(t.name)} · ${Math.round(km)} km · ~${fmtMin(roughTrainMin(km))}${d ? ` · ${fmtDay(d.arrive)}` : ""}</span>
-            <button class="leg-btn hot" data-leg="${key}">🚆 Trains &amp; buses</button></li>
+            <button class="leg-btn hot" data-leg="${key}">${ICON("train")} Trains &amp; buses</button></li>
           <li class="leg-detail" id="leg-${key}" hidden></li>`;
       }
       return `${travel}<li class="stay">
-          <span class="stop-letter" style="background:var(--plum)">${i + 1}</span>
+          <span class="stop-letter" style="background:var(--tint)">${i + 1}</span>
           <span class="stop-main">
             <div class="stop-name">${esc(t.name)}</div>
             <div class="stop-meta">${nights ? `${nights} night${nights > 1 ? "s" : ""}` : "Day trip"}${d ? ` · ${fmtDay(d.arrive)}${nights ? ` – ${fmtDay(d.leave)}` : ""}` : ""} · ${t.spots.length} spots</div>
             <div class="stay-tools">
-              <button class="mini" data-nights="${i}" data-delta="-1" aria-label="One night less">−</button>
+              <button class="mini" data-nights="${i}" data-delta="-1" aria-label="One night less">${ICON("minus")}</button>
               <span class="nights">${nights ? `${nights} night${nights > 1 ? "s" : ""}` : "day trip"}</span>
-              <button class="mini" data-nights="${i}" data-delta="1" aria-label="One night more">＋</button>
-              <button class="btn small primary" data-opencity="${esc(t.id)}">Open city →</button>
+              <button class="mini" data-nights="${i}" data-delta="1" aria-label="One night more">${ICON("plus")}</button>
+              <button class="btn small primary" data-opencity="${esc(t.id)}">Open city ${ICON("right")}</button>
             </div>
           </span>
-          <button class="mini" data-stayup="${i}" title="Move up" aria-label="Move up">▲</button>
-          <button class="mini" data-staydown="${i}" title="Move down" aria-label="Move down">▼</button>
-          <button class="mini" data-stayremove="${i}" title="Remove from itinerary" aria-label="Remove from itinerary">✕</button>
+          <button class="mini" data-stayup="${i}" title="Move up" aria-label="Move up">${ICON("up")}</button>
+          <button class="mini" data-staydown="${i}" title="Move down" aria-label="Move down">${ICON("down")}</button>
+          <button class="mini" data-stayremove="${i}" title="Remove from itinerary" aria-label="Remove from itinerary">${ICON("xmark")}</button>
         </li>`;
     }).join("");
 
@@ -1203,7 +1203,7 @@
     map.render(list.map((x, i) => {
       const t = tripById(x.tripId);
       const p = cityPoint(t);
-      return { lat: p.lat, lng: p.lng, title: t.name, label: String(i + 1), color: "#7a1f5c", showName: true,
+      return { lat: p.lat, lng: p.lng, title: t.name, label: String(i + 1), color: "#ff2d55", showName: true,
         onClick: () => { switchTrip(t); showPlan(); } };
     }));
     map.setRoute(pts);
@@ -1219,15 +1219,15 @@
     const n = stays().length;
     body.innerHTML = `
       <div class="section">
-        <button class="btn primary wide" id="btn-itinerary">🗺️ My itinerary${n ? ` · ${n} ${n > 1 ? "stops" : "stop"}` : ""}</button>
+        <button class="btn primary wide" id="btn-itinerary">${ICON("route")} My itinerary${n ? ` · ${n} ${n > 1 ? "stops" : "stop"}` : ""}</button>
         <p class="hint">Plan several cities in a row, e.g. Brussels → Bruges → Ghent, with trains between them.</p>
       </div>
       <ul class="plain stops">${trips.map((t) => `
         <li data-trip="${esc(t.id)}" class="${t.id === state.trip.id ? "current" : ""}">
-          <span class="stop-letter" style="background:var(--plum)">${esc(t.name.slice(0, 1).toUpperCase())}</span>
+          <span class="stop-letter" style="background:var(--tint)">${esc(t.name.slice(0, 1).toUpperCase())}</span>
           <span class="stop-main"><div class="stop-name">${esc(t.name)}</div>
             <div class="stop-meta">${t.spots.length} spots${t.plan ? ` · ${t.plan.length} in plan` : ""}${t.id === state.trip.id ? " · <b>open now</b>" : ""}</div></span>
-          ${trips.length > 1 ? `<button class="mini" data-deltrip="${esc(t.id)}" title="Delete trip" aria-label="Delete trip">🗑</button>` : ""}
+          ${trips.length > 1 ? `<button class="mini" data-deltrip="${esc(t.id)}" title="Delete trip" aria-label="Delete trip">${ICON("trash")}</button>` : ""}
         </li>`).join("")}
       </ul>
       <form class="section form" id="city-form">
@@ -1251,9 +1251,9 @@
       toast(err.message || "Search failed");
     }
     el.innerHTML = state.cityResults.length
-      ? state.cityResults.map((c, i) => `<li data-city="${i}"><span class="dot" style="background:var(--plum)"></span>
+      ? state.cityResults.map((c, i) => `<li data-city="${i}"><span class="dot" style="background:var(--tint)"></span>
           <span class="stop-main"><div class="stop-name">${esc(c.name)}</div><div class="stop-meta">${esc(c.label)}</div></span>
-          <button class="mini" data-city="${i}">Start trip →</button></li>`).join("")
+          <button class="mini text" data-city="${i}">Start trip ${ICON("right")}</button></li>`).join("")
       : `<li class="empty">No cities found.</li>`;
   }
 
@@ -1337,7 +1337,7 @@
     $("lb-done").checked = !!p.recreated;
     $("lb-prev").hidden = photos.length < 2;
     $("lb-next").hidden = photos.length < 2;
-    $("lb-ai").textContent = p.guide || p.notes ? "✨ Show photo guide" : "✨ Where to stand & how to pose";
+    $("lb-ai").innerHTML = `${ICON("sparkles")} ${p.guide || p.notes ? "Show photo guide" : "Where to stand & how to pose"}`;
     $("lb-ai").disabled = false;
     $("lb-guide").hidden = true;
     $("lightbox").classList.remove("with-guide");
@@ -1403,8 +1403,8 @@
         <li>Copy Claude's answer and paste it below to keep it with this photo.</li>
       </ol>
       <div class="actions">
-        ${share ? `<button class="btn primary" id="coach-share">Share to Claude</button>` : ""}
-        <button class="btn ${share ? "" : "primary"}" id="coach-open">Copy question &amp; open Claude</button>
+        ${share ? `<button class="btn primary" id="coach-share">${ICON("share")} Share to Claude</button>` : ""}
+        <button class="btn ${share ? "" : "primary"}" id="coach-open">${ICON("copy")} Copy question &amp; open Claude</button>
       </div>
       <details class="prompt-box"><summary>See the question</summary><pre>${esc(coachPrompt(p))}</pre></details>
       <label class="notes-label" for="coach-notes">Claude's answer</label>
@@ -1441,7 +1441,7 @@
       p.notes = $("coach-notes").value.trim();
       await db.put(p);
       toast(p.notes ? "Saved with this photo ✓" : "Removed the saved answer");
-      $("lb-ai").textContent = p.notes ? "✨ Show photo guide" : "✨ Where to stand & how to pose";
+      $("lb-ai").innerHTML = `${ICON("sparkles")} ${p.notes ? "Show photo guide" : "Where to stand & how to pose"}`;
       showFreeCoach(p);
       renderGallery(p.spotId);
     }
@@ -1454,7 +1454,7 @@
     if (!settings.claudeKey) return showFreeCoach(p);
     const btn = $("lb-ai");
     btn.disabled = true;
-    btn.textContent = "✨ Studying the photo…";
+    btn.innerHTML = `${ICON("sparkles")} Studying the photo…`;
     const spot = spotById(p.spotId);
     try {
       const guide = await window.WPAI.photoGuide({
@@ -1468,12 +1468,12 @@
       await db.put(p);
       if (state.lightbox.photos[state.lightbox.index] === p) {
         showGuide(guide);
-        btn.textContent = "✨ Show photo guide";
+        btn.innerHTML = `${ICON("sparkles")} Show photo guide`;
       }
       renderGallery(p.spotId);
     } catch (err) {
       toast(err.message, 7000);
-      btn.textContent = "✨ Where to stand & how to pose";
+      btn.innerHTML = `${ICON("sparkles")} Where to stand & how to pose`;
     } finally {
       btn.disabled = false;
     }
@@ -1726,7 +1726,7 @@
   $("btn-expand").onclick = () => {
     const expanded = panel.dataset.state === "expanded";
     setPanel(expanded ? "open" : "expanded");
-    $("btn-expand").textContent = expanded ? "⤢" : "⤡";
+    $("btn-expand").innerHTML = ICON(expanded ? "expand" : "shrink");
     $("btn-expand").title = expanded ? "Expand" : "Shrink";
   };
   $("panel-grip").onclick = () => $("btn-expand").click();

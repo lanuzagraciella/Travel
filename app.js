@@ -99,6 +99,15 @@
     if (!trips.some((x) => x.id === t.id)) trips.push({ ...structuredClone(t), plan: null, done: [] });
   }
   store.set("seeded", seeded);
+  // Starter inspiration posts for the ready-made cities (added once per spot,
+  // so posts you remove stay removed).
+  for (const t of trips) for (const sp of t.spots) {
+    const starter = window.SEED_POSTS?.[sp.id];
+    if (!starter || sp.starterPosts) continue;
+    const have = new Set((sp.posts || []).map((x) => x.url));
+    sp.posts = [...(sp.posts || []), ...starter.filter((x) => !have.has(x.url)).map((x) => ({ ...x, starter: true }))];
+    sp.starterPosts = true;
+  }
   const state = {
     trip: trips.find((t) => t.id === store.get("activeTrip", "")) || trips[0],
     selected: null,
@@ -485,27 +494,88 @@
       .replace(/发布了一篇小红书笔记，快来看吧！?/, "")
       .replace(/^\s*\d+\s*/, "")
       .replace(/\s+/g, " ").trim();
+    if (!title) title = text.slice(text.indexOf(url) + url.length).replace(/复制本条信息.*$/s, "").replace(/\s+/g, " ").trim();
     if (!title) title = `${postSite(url)} post`;
     return { url, title: title.slice(0, 90) };
   }
 
+  // Inspiration from other travellers: app searches, saved posts (shown as
+  // official embeds) and RedNote searches in Chinese.
+  const SITE_CLASS = { Pinterest: "pinterest", TikTok: "tiktok", Instagram: "instagram", RedNote: "rednote" };
   function rednoteHtml(spot) {
     const terms = rednoteTerms(spot);
     state.rnTerms = terms;
     const posts = spot.posts || [];
-    return `<div class="section rednote" id="rednote">
-      <h3>Ideas on RedNote</h3>
-      <p class="hint">RedNote (小红书) users share the best camera spots (机位), poses and angles. Tap a search to open it in RedNote${spot.zh ? ` · Chinese name: <b>${esc(spot.zh)}</b>` : ""}.</p>
-      <div class="terms">${terms.map((t, i) => `<button class="term" data-rn="${i}">${esc(t)}</button>`).join("")}</div>
-      ${posts.length ? `<h4 class="posts-title">Saved posts</h4><ul class="plain posts">${posts.map((p, i) => `
-        <li><a href="${esc(p.url)}" target="_blank" rel="noopener"><span class="post-site">${esc(p.site)}</span> ${esc(p.title)}</a>
-          <button class="mini" data-delpost="${i}" aria-label="Remove saved post">${ICON("xmark")}</button></li>`).join("")}</ul>` : ""}
-      <form class="search-row" id="post-form" style="margin-top:10px">
-        <input id="post-link" placeholder="Paste a RedNote (or Instagram) share link" autocomplete="off" />
+    const links = window.WPInspo.searchLinks(spot, spot.zh);
+    return `<div class="section inspo" id="rednote">
+      <h3>Inspiration from travellers</h3>
+      <p class="hint">See how others photographed ${esc(spot.name)}, then save the shots you want to recreate.</p>
+      <div class="app-links">${links.map((l) => `<a class="app-link ${SITE_CLASS[l.site]}" target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.site)}</a>`).join("")}</div>
+      ${posts.length ? `<h4 class="posts-title">Saved posts</h4><ul class="plain posts">${posts.map((p, i) => {
+        const embeddable = !!window.WPInspo.embedInfo(p.url);
+        return `<li class="post">
+          <div class="post-row">
+            <span class="post-site ${SITE_CLASS[p.site] || ""}">${esc(p.site)}</span>
+            <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+            ${embeddable ? `<button class="mini text" data-showpost="${i}">${ICON("down")} View</button>` : ""}
+            <button class="mini" data-delpost="${i}" aria-label="Remove saved post">${ICON("xmark")}</button>
+          </div>
+          <div class="post-embed" id="post-embed-${i}" hidden></div>
+        </li>`;
+      }).join("")}</ul>` : ""}
+      <form class="search-row" id="post-form" style="margin-top:12px">
+        <input id="post-link" placeholder="Paste a Pinterest, TikTok, Instagram or RedNote link" autocomplete="off" />
         <button class="btn" type="submit">Save</button>
       </form>
-      <p class="hint">In RedNote tap Share → Copy link, then paste it here. Love a photo? Screenshot it, add it to <b>Pose inspiration</b> above and tap ✨ for camera directions.</p>
+      <p class="hint">In any of these apps tap Share → Copy link, then paste it here. To get where-to-stand directions, screenshot the photo and add it to <b>Pose inspiration</b>.</p>
+      <h4 class="posts-title">RedNote searches (Chinese)${spot.zh ? ` · ${esc(spot.zh)}` : ""}</h4>
+      <div class="terms">${terms.map((t, i) => `<button class="term" data-rn="${i}">${esc(t)}</button>`).join("")}</div>
     </div>`;
+  }
+
+  // Free-licence photos of this spot, credited, each one savable as a pose.
+  function ccHtml() {
+    return `<div class="section" id="cc">
+      <h3>Free-licence photos</h3>
+      <div class="cc-grid" id="cc-grid"><p class="hint">Loading photos…</p></div>
+      <p class="hint">Shared by photographers under Creative Commons licences, via <a href="https://openverse.org" target="_blank" rel="noopener">Openverse</a>. Tap a photo to see the original; <b>＋ Pose</b> saves it to your pose gallery with its credit.</p>
+    </div>`;
+  }
+
+  async function loadFreePhotos(spot) {
+    let items = [];
+    try {
+      items = await window.WPInspo.freePhotos(spot, state.trip.name);
+    } catch (err) {
+      const el = $("cc-grid");
+      if (el && state.selected === spot.id) el.innerHTML = `<p class="hint">${esc(err.message)}</p>`;
+      return;
+    }
+    const el = $("cc-grid");
+    if (!el || state.selected !== spot.id) return;
+    state.ccItems = items;
+    el.innerHTML = items.length
+      ? items.map((x, i) => `<figure class="cc">
+          <a href="${esc(x.page)}" target="_blank" rel="noopener"><img src="${esc(x.thumb)}" alt="${esc(x.title)}" loading="lazy" /></a>
+          <button class="cc-add" data-ccpose="${i}">${ICON("plus")} Pose</button>
+          <figcaption>${esc(x.creator)} · ${esc(x.licence)}</figcaption>
+        </figure>`).join("")
+      : `<p class="hint">No free-licence photos found for this spot. Try the app searches above.</p>`;
+  }
+
+  // Save a free-licence photo into the spot's pose gallery, keeping its credit.
+  async function saveCcAsPose(item, spotId) {
+    let blob = null;
+    try {
+      const r = await fetch(item.thumb, { mode: "cors" });
+      if (r.ok) blob = await r.blob();
+    } catch { /* keep a link to the image instead */ }
+    await db.put({
+      id: crypto.randomUUID(), spotId, blob, src: blob ? null : item.thumb, createdAt: Date.now(), recreated: false,
+      credit: { creator: item.creator, licence: item.licence, licenceUrl: item.licenceUrl, page: item.page },
+    });
+    await renderGallery(spotId);
+    toast("Saved to your pose gallery ✓");
   }
 
   // Look up a spot's Chinese name once (via its Wikipedia article, found by
@@ -939,6 +1009,7 @@
         <p class="hint">Save photos you love from RedNote, Instagram or Pinterest and upload them here. Tap one, then <b>Where to stand &amp; how to pose</b>.</p>
       </div>
       ${rednoteHtml(spot)}
+      ${ccHtml()}
       ${spot.poses?.length ? `<div class="section"><h3>Shot ideas</h3><ul class="plain poses">${spot.poses.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div>` : ""}
       ${gettingHereHtml(spot)}
       ${nearby.length ? `<div class="section">
@@ -953,6 +1024,7 @@
 
     renderGallery(id);
     ensureChinese(spot);
+    loadFreePhotos(spot);
 
     // Pull Google details for spots that don't have them yet (once per spot).
     if (await window.WPPlaces.enrichFromGoogle(spot, state.trip.name)) {
@@ -985,7 +1057,11 @@
 
   // Object URLs for stored photos, reused so thumbnails don't flicker.
   const urls = new Map();
-  const urlFor = (p) => { if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); };
+  const urlFor = (p) => {
+    if (!p.blob) return p.src || "";
+    if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob));
+    return urls.get(p.id);
+  };
 
   async function renderGallery(spotId) {
     const el = $("gallery");
@@ -996,6 +1072,7 @@
       <div class="thumb" role="button" tabindex="0" data-open="${i}">
         <img src="${urlFor(p)}" alt="Pose inspiration ${i + 1}" loading="lazy" />
         ${p.recreated ? `<span class="badge">✓ Recreated</span>` : ""}
+        ${p.credit ? `<span class="badge cc-badge">CC</span>` : ""}
         ${p.guide || p.notes ? `<span class="badge ai">✨ Guide</span>` : ""}
         <button class="del" data-del="${esc(p.id)}" aria-label="Delete photo">${ICON("xmark")}</button>
       </div>`).join("") +
@@ -1378,6 +1455,9 @@
     if (!p) return;
     $("lb-img").src = urlFor(p);
     $("lb-done").checked = !!p.recreated;
+    $("lb-credit").innerHTML = p.credit
+      ? `Photo: <a href="${esc(p.credit.page)}" target="_blank" rel="noopener">${esc(p.credit.creator)}</a> · ${p.credit.licenceUrl ? `<a href="${esc(p.credit.licenceUrl)}" target="_blank" rel="noopener">${esc(p.credit.licence)}</a>` : esc(p.credit.licence)}`
+      : "";
     $("lb-prev").hidden = photos.length < 2;
     $("lb-next").hidden = photos.length < 2;
     $("lb-ai").innerHTML = `${ICON("sparkles")} ${p.guide || p.notes ? "Show photo guide" : "Where to stand & how to pose"}`;
@@ -1426,6 +1506,7 @@
   // app, then paste the answer back here so it stays with the photo.
   const photoFile = (p) => new File([p.blob], "inspiration.jpg", { type: p.blob.type || "image/jpeg" });
   const canShareFile = (p) => {
+    if (!p.blob) return false;
     try { return !!navigator.canShare?.({ files: [photoFile(p)] }); } catch { return false; }
   };
   function coachPrompt(p) {
@@ -1502,7 +1583,7 @@
     try {
       const guide = await window.WPAI.photoGuide({
         apiKey: settings.claudeKey,
-        blob: p.blob,
+        blob: p.blob || await (await fetch(p.src)).blob(),
         spotName: spot?.name,
         cityName: state.trip.name,
         bestTime: spot?.bestTime,
@@ -1643,6 +1724,29 @@
       return toast(res.changed
         ? `Rebuilt: ${res.text} ✨`
         : `Already the best plan for these spots (${res.text}). Add, remove or change hours, then rebuild.`, 6000);
+    }
+    if (d.ccpose !== undefined) {
+      const item = state.ccItems?.[Number(d.ccpose)];
+      if (!item) return;
+      t.disabled = true;
+      await saveCcAsPose(item, state.selected);
+      t.innerHTML = `${ICON("check")} Saved`;
+      return;
+    }
+    if (d.showpost !== undefined) {
+      const spot = spotById(state.selected);
+      const box = $(`post-embed-${d.showpost}`);
+      const post = spot?.posts?.[Number(d.showpost)];
+      if (!box || !post) return;
+      if (box.hidden) {
+        if (!box.innerHTML) box.innerHTML = window.WPInspo.embedFrame(post.url);
+        box.hidden = false;
+        t.innerHTML = `${ICON("up")} Hide`;
+      } else {
+        box.hidden = true;
+        t.innerHTML = `${ICON("down")} View`;
+      }
+      return;
     }
     if (d.rn !== undefined) {
       const term = state.rnTerms[Number(d.rn)];

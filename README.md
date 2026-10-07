@@ -16,6 +16,12 @@ home with the photos they had in mind.
 - **🚌 Bus, tram and metro.** Every leg of the tour has a **Transit** button showing which line to take, where to get on and off, how many stops, departure times and whether it beats walking. Long walks (15 min+) are flagged in yellow, and each spot has a **Getting here** section. Routes come from [Transitous](https://transitous.org), a free, community-run planner; a **Live times in Google Maps** link is always there as a backup.
 - **A spot panel** with photo, address, best light, shot ideas and **walking time to nearby spots**. Use ⤢ to expand it; on phones it's a bottom sheet.
 - **Pose-inspiration gallery.** Upload photos you want to recreate. Tap one to view it full screen while you shoot.
+- **📸 Inspiration from travellers.** Every spot shows how other people photographed it, legally and without scraping:
+  - **Starter posts** for all 65 spots in the six ready-made cities: real public Pinterest pins and TikTok videos (found by web search), shown with each platform's official embed and credited to their creators.
+  - **Free-licence photos** load automatically from [Openverse](https://openverse.org) (Creative Commons photos from Flickr, Wikimedia and more). Tap **＋ Pose** to save one to your pose gallery; its photographer and licence are kept and shown.
+  - **One-tap searches** on Pinterest, TikTok, Instagram and RedNote for that exact spot.
+  - **Save any post:** paste a Pinterest, TikTok, Instagram or RedNote link and it's kept on the spot, opening as the real post where the platform allows embedding.
+  - Your own pose-photo uploads work as before.
 - **📕 RedNote (小红书) ideas.** Every spot has one-tap RedNote searches in Chinese, the way RedNote users write: camera spots (机位), poses (拍照姿势) and photos (拍照). Chinese place names come from Wikipedia automatically. Searches are always about that one spot, never the whole city; spots without a Wikipedia link are matched to the article at their location. Every stop in the day plan has a 📕 button, and each spot page has a **📕 Search on RedNote** button. Paste a RedNote share link to save a post to the spot. RedNote has no public API, so the app links to RedNote rather than showing its posts inside the app.
 - **✨ AI photo coach.** Tap **How do I take this?** on an inspiration photo. Then share it to the free Claude app (or copy the ready-made question), and Claude explains how to recreate the shot with a phone camera. Paste the answer back to keep it with the photo.
 - **Photo progress.** The top bar tracks how many spots you've got your shot at.
@@ -60,6 +66,8 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | `transit.js` | Bus, tram and metro routes (Transitous) |
 | `sun.js` | Sunrise, sunset and golden-hour times (computed on the device) |
 | `icons.js` | Line icons in the style of SF Symbols |
+| `inspo.js` | Free-licence photos (Openverse), official post embeds and app searches |
+| `seed-posts.js` | Starter Pinterest/TikTok posts for the ready-made cities |
 | `data.js` | Brussels starter spots and categories |
 | `vendor/leaflet/` | [Leaflet](https://leafletjs.com) 1.9.4 map library (BSD-2) |
 

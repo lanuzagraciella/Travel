@@ -373,10 +373,14 @@
         ${start ? `<button class="btn" type="button" id="start-cancel">Cancel</button>` : ""}
       </div>
       <div class="search-row" style="margin-top:10px">
-        <input id="start-q" type="search" placeholder="Hotel, station or address" autocomplete="off" />
+        <input id="start-q" type="search" placeholder="Hotel, station or address" autocomplete="off" enterkeyhint="search" />
         <button class="btn primary" type="submit">Find</button>
       </div>
-      <ul class="plain results" id="start-results"></ul>
+      <p class="start-msg" id="start-msg" hidden></p>
+      <ul class="plain start-results" id="start-results"></ul>
+      ${spots().length ? `<label for="start-spot">Or start from one of your spots</label>
+      <select id="start-spot"><option value="">Choose a spot…</option>${spots().map((x) =>
+        `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select>` : ""}
     </form>`;
   }
 
@@ -387,13 +391,13 @@
     const s = spotById(id);
     if (!days || !s || days.list.some((d) => d.includes(id))) return;
     save(); // keep edits to the shown day
-    const startMin = toMin(days.start), endMin = toMin(days.end);
     const options = days.list
       .map((ids, d) => ({ d, dist: ids.length ? Math.min(...ids.map((x) => meters(spotById(x) || s, s))) : 1e9 }))
       .sort((a, b) => a.dist - b.dist);
     for (const { d } of options) {
       const trial = optimize([...days.list[d], id]);
-      if (scheduleDay(trial, startMin).endsAt <= endMin) {
+      const h = hoursOf(d);
+      if (scheduleDay(trial, toMin(h.start)).endsAt <= toMin(h.end)) {
         days.list[d] = trial;
         if (d === days.current) state.trip.plan = trial.slice();
         days.leftover = days.leftover.filter((x) => x !== id);
@@ -428,30 +432,56 @@
     }
   }
 
-  async function findStart(q) {
-    const el = $("start-results");
-    if (!q.trim() || !el) return;
-    el.innerHTML = `<li class="empty">Searching…</li>`;
-    try {
-      state.startResults = await window.WPPlaces.searchPlaces(q.trim(), map.getCenter());
-    } catch (err) {
-      state.startResults = [];
-      toast(err.message || "Search failed");
-    }
-    el.innerHTML = state.startResults.length
-      ? state.startResults.map((r, i) => `<li data-startresult="${i}"><span class="dot" style="background:#7a1f5c"></span>
-          <span class="stop-main"><div class="stop-name">${esc(r.name)}</div><div class="stop-meta">${esc(r.address)}</div></span>
-          <button class="mini" data-startresult="${i}">Start here</button></li>`).join("")
-      : `<li class="empty">Nothing found. Try “Tap on map” instead.</li>`;
+  // A message under the start form that stays until the next action.
+  function startMsg(text, kind = "") {
+    const el = $("start-msg");
+    if (!el) return toast(text, 7000);
+    el.textContent = text;
+    el.className = `start-msg ${kind}`;
+    el.hidden = !text;
   }
 
+  async function findStart(q) {
+    const el = $("start-results");
+    if (!el) return;
+    if (!q.trim()) return startMsg("Type your hotel, a station or an address first.");
+    startMsg("");
+    el.innerHTML = `<li class="hint">Searching…</li>`;
+    let error = null;
+    try {
+      state.startResults = await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
+    } catch (err) {
+      state.startResults = [];
+      error = err.message;
+    }
+    el.innerHTML = state.startResults.map((r, i) => `<li data-startresult="${i}">
+        <span class="stop-main"><div class="stop-name">${esc(r.name)}</div><div class="stop-meta">${esc(r.address)}</div></span>
+        <button class="mini text" data-startresult="${i}">${ICON("flag")} Start here</button></li>`).join("");
+    if (error) startMsg(error, "error");
+    else if (!state.startResults.length) startMsg(`Nothing found for “${q.trim()}” near ${state.trip.name}. Check the spelling, add the street, or use “Tap on map”.`);
+  }
+
+  // The city's centre, so searches stay in this trip's city even while the
+  // map shows the itinerary overview or another area.
+  const cityCenter = () => ({ lat: state.trip.center[0], lng: state.trip.center[1] });
+
   function locateStart() {
-    if (!navigator.geolocation) return toast("Your browser can't share your location.");
-    toast("Finding your location…");
+    if (!window.isSecureContext) return startMsg("Location only works on the https:// version of the app.", "error");
+    if (!navigator.geolocation) return startMsg("This browser can't share your location. Search for your hotel instead.", "error");
+    startMsg("Finding your location…");
     navigator.geolocation.getCurrentPosition(
-      (pos) => setStart({ name: "My location", lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => toast("Couldn't get your location. Allow location access, or search for your hotel instead."),
-      { enableHighAccuracy: true, timeout: 10000 },
+      (pos) => {
+        const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const far = meters(here, cityCenter()) > 50000;
+        setStart({ name: "My location", ...here });
+        if (far) toast(`You seem to be far from ${state.trip.name}. Your tour starts from where you are now; change it once you arrive.`, 8000);
+      },
+      (err) => startMsg(err.code === 1
+        ? "Location is turned off for this site. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using. On Android: tap the lock icon next to the address → Permissions → Location. Or search for your hotel below."
+        : err.code === 3
+          ? "Finding your location took too long. Try again outdoors, or search for your hotel below."
+          : "Couldn't find your location. Search for your hotel below, or use “Tap on map”.", "error"),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     );
   }
 
@@ -722,6 +752,13 @@
   const toMin = (hhmm) => { const [h, m] = String(hhmm || "09:00").split(":").map(Number); return h * 60 + (m || 0); };
   const fmtClock = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(Math.round(min % 60)).padStart(2, "0")}`;
 
+  // Each day can have its own hours; otherwise it uses the trip's default.
+  function hoursOf(i, d = state.trip.days) {
+    const h = d?.hours?.[i];
+    return { start: h?.start || d.start, end: h?.end || d.end };
+  }
+  const visitMin = (s) => s.stay ?? VISIT_MIN[s.category] ?? 45;
+
   // Arrival and leaving times for a day's stops, with a lunch break if the
   // day runs through lunchtime without a food stop.
   function scheduleDay(ids, startMin) {
@@ -736,7 +773,7 @@
         t += LUNCH_MIN;
         lunched = true;
       }
-      const stay = VISIT_MIN[s.category] ?? 45;
+      const stay = visitMin(s);
       items.push({ type: "stop", id: s.id, arrive: t, leave: t + stay });
       t += stay;
       prev = s;
@@ -771,19 +808,21 @@
   }
 
   // Returns a short summary of what changed, for the toast.
-  function buildDays(count, start, end, keepDay = 0) {
+  function buildDays(count, start, end, keepDay = 0, resetHours = false) {
     const trip = state.trip;
-    const startMin = toMin(start), endMin = toMin(end);
+    const hours = resetHours ? [] : (trip.days?.hours || []).slice(0, count);
+    const dayDef = { start, end, hours };
+    const lim = (i) => { const h = hoursOf(i, dayDef); return { s: toMin(h.start), e: toMin(h.end) }; };
     const before = trip.days ? JSON.stringify([trip.days.list, trip.days.leftover]) : null;
     const list = spots().filter((s) => s.category !== "stay" && !s.skip);
-    const fits = (ids) => scheduleDay(ids, startMin).endsAt <= endMin;
+    const fits = (ids, i) => scheduleDay(ids, lim(i).s).endsAt <= lim(i).e;
     let days = clusterSpots(list, count).map((g) => optimize(g.map((s) => s.id)));
     const leftover = [];
     // Trim days that run past the end time, then try to fit the extras into
     // the nearest day that still has room.
-    days = days.map((ids) => {
+    days = days.map((ids, i) => {
       const kept = ids.slice();
-      while (kept.length && !fits(kept)) leftover.push(kept.pop());
+      while (kept.length && !fits(kept, i)) leftover.push(kept.pop());
       return kept;
     });
     for (let i = leftover.length - 1; i >= 0; i--) {
@@ -793,27 +832,27 @@
         .sort((a, b) => a.dist - b.dist);
       for (const { d } of options) {
         const trial = optimize([...days[d], s.id]);
-        if (fits(trial)) { days[d] = trial; leftover.splice(i, 1); break; }
+        if (fits(trial, d)) { days[d] = trial; leftover.splice(i, 1); break; }
       }
     }
-    // Balance: move border spots from the busiest day to the lightest until
-    // the days end within about an hour of each other.
-    const endOf = (ids) => scheduleDay(ids, startMin).endsAt;
+    // Balance: move border spots from the fullest day to the one with the
+    // most free time, until their free time is within about an hour.
+    const freeOf = (ids, i) => lim(i).e - (ids.length ? scheduleDay(ids, lim(i).s).endsAt : lim(i).s);
     const centre = (ids) => ({ lat: ids.reduce((a, id) => a + spotById(id).lat, 0) / ids.length, lng: ids.reduce((a, id) => a + spotById(id).lng, 0) / ids.length });
     for (let guard = 0; guard < 30 && days.length > 1; guard++) {
-      const order = days.map((ids, i) => ({ i, end: ids.length ? endOf(ids) : startMin })).sort((a, b) => b.end - a.end);
+      const order = days.map((ids, i) => ({ i, free: freeOf(ids, i) })).sort((a, b) => a.free - b.free);
       const busy = order[0], light = order[order.length - 1];
-      if (busy.end - light.end < 75 || days[busy.i].length < 2) break;
+      if (light.free - busy.free < 75 || days[busy.i].length < 2) break;
       const target = days[light.i].length ? centre(days[light.i]) : spotById(days[busy.i][0]);
       const move = days[busy.i].slice().sort((a, b) => meters(spotById(a), target) - meters(spotById(b), target))[0];
       const newLight = optimize([...days[light.i], move]);
       const newBusy = optimize(days[busy.i].filter((id) => id !== move));
-      if (!fits(newLight) || endOf(newLight) >= busy.end) break;
+      if (!fits(newLight, light.i) || freeOf(newLight, light.i) <= busy.free) break;
       days[light.i] = newLight;
       days[busy.i] = newBusy;
     }
     const current = Math.min(keepDay, count - 1);
-    trip.days = { count, start, end, list: days, leftover, current };
+    trip.days = { count, start, end, hours, list: days, leftover, current };
     trip.plan = days[current].slice();
     save();
     const stops = days.reduce((n, d) => n + d.length, 0);
@@ -867,14 +906,23 @@
     const date = dayDate(d.current);
     const sun = window.WPSun.sunTimes(date || new Date(), trip.center[0], trip.center[1]);
     const t = (x) => (x ? fmtTime(x) : "–");
-    const sched = scheduleDay(plan(), toMin(d.start));
-    const over = sched.endsAt > toMin(d.end);
+    const h = hoursOf(d.current);
+    const sched = scheduleDay(plan(), toMin(h.start));
+    const over = sched.endsAt > toMin(h.end);
+    const custom = !!d.hours?.[d.current];
     return `<div class="section days-box">
       <div class="day-chips">${d.list.map((ids, i) => `<button class="day-chip ${i === d.current ? "on" : ""}" data-day="${i}">Day ${i + 1}<small>${ids.length} stops</small></button>`).join("")}</div>
-      <p class="day-line"><b>${date ? fmtDay(date) : `Day ${d.current + 1}`}</b> · ${esc(d.start)}–${esc(d.end)} · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs late</span>` : ""}</p>
+      <p class="day-line"><b>${date ? fmtDay(date) : `Day ${d.current + 1}`}</b> · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs past ${esc(h.end)}: tap Rebuild to move stops</span>` : ""}</p>
+      <div class="day-hours">
+        <span>Day ${d.current + 1} hours</span>
+        <input type="time" id="dh-start" value="${esc(h.start)}" aria-label="Day ${d.current + 1} start time" />
+        <span>–</span>
+        <input type="time" id="dh-end" value="${esc(h.end)}" aria-label="Day ${d.current + 1} end time" />
+        ${custom ? `<button class="mini text" id="dh-reset" title="Use the default hours (${esc(d.start)}–${esc(d.end)})">Reset</button>` : ""}
+      </div>
       <p class="hint">🌅 Sunrise ${t(sun.sunrise)}, golden light until ${t(sun.goldenMorningEnd)} · 🌇 golden light from ${t(sun.goldenEveningStart)}, sunset ${t(sun.sunset)}${date ? "" : " (today)"}</p>
       ${d.leftover.length ? `<p class="hint">⚠️ ${d.leftover.length} spot${d.leftover.length > 1 ? "s" : ""} didn't fit: add a day, longer hours, or drop some. They're listed at the bottom.</p>` : ""}
-      <div class="actions"><button class="btn small" id="days-edit">${ICON("clock")} Days &amp; hours</button><button class="btn small" id="days-rebuild">${ICON("refresh")} Rebuild</button></div>
+      <div class="actions"><button class="btn small" id="days-edit">${ICON("clock")} All days</button><button class="btn small" id="days-rebuild">${ICON("refresh")} Rebuild</button></div>
     </div>`;
   }
 
@@ -898,7 +946,7 @@
     const dDate = days ? dayDate(days.current) : null;
     setHeading(days ? `Day ${days.current + 1}${dDate ? ` · ${fmtDay(dDate)}` : ""} · ${state.trip.name}` : `My day in ${state.trip.name}`, false);
     const stops = plan().map(spotById).filter(Boolean);
-    const sched = days ? scheduleDay(plan(), toMin(days.start)) : null;
+    const sched = days ? scheduleDay(plan(), toMin(hoursOf(days.current).start)) : null;
     const timeOf = (id) => sched?.items.find((x) => x.type === "stop" && x.id === id);
     const lunchBefore = (id) => {
       if (!sched) return null;
@@ -994,6 +1042,10 @@
         <span class="chip">${cat.emoji} ${cat.label}</span>
         ${detailsHtml(spot)}
         ${spot.bestTime ? `<p>🕒 <b>Best light:</b> ${esc(spot.bestTime)}</p>` : ""}
+        <label class="stay-label">${ICON("clock")} Time here
+          <select id="stay-min">${[15, 30, 45, 60, 90, 120, 150, 180].map((m) =>
+            `<option value="${m}" ${visitMin(spot) === m ? "selected" : ""}>${m < 60 ? `${m} min` : `${m / 60} h`.replace(".5 h", " h 30")}</option>`).join("")}</select>
+        </label>
         <div class="actions">
           <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">${ICON("book")} Ideas on RedNote</a>
           <button class="btn ${inPlan ? "" : "primary"}" id="btn-toggle-plan">${inPlan ? `${ICON("check")} In my day` : `${ICON("plus")} Add to my day`}</button>
@@ -1126,7 +1178,7 @@
     if (!q.trim()) return;
     $("results").innerHTML = `<li class="empty">Searching…</li>`;
     try {
-      state.results = await window.WPPlaces.searchPlaces(q.trim(), map.getCenter());
+      state.results = await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
       state.lastQuery = q;
     } catch (err) {
       state.results = [];
@@ -1667,7 +1719,7 @@
       }
       state.editingDays = false;
       const keep = state.trip.days && state.trip.days.count === count ? state.trip.days.current : 0;
-      const res = buildDays(count, start, end, keep);
+      const res = buildDays(count, start, end, keep, true);
       renderMarkers(); updateHeader(); showPlan();
       return toast(`Planned ${res.text} ✨`);
     }
@@ -1712,6 +1764,12 @@
     if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
     if (t.id === "btn-popular") return addPopularSpots(false);
     if (d.day !== undefined) return selectDay(Number(d.day));
+    if (t.id === "dh-reset") {
+      const d = state.trip.days;
+      if (d.hours) d.hours[d.current] = null;
+      save();
+      return showPlan(false);
+    }
     if (t.id === "days-edit") { state.editingDays = true; return showPlan(); }
     if (t.id === "days-cancel") { state.editingDays = false; return showPlan(); }
     if (t.id === "days-rebuild") {
@@ -1762,7 +1820,12 @@
       return;
     }
     if (t.id === "start-locate") return locateStart();
-    if (t.id === "start-pick") { setAdding("start"); if (PHONE()) setPanel("closed"); return; }
+    if (t.id === "start-pick") {
+      setAdding("start");
+      if (PHONE()) setPanel("closed");
+      toast("Tap the map where you'll start.");
+      return;
+    }
     if (t.id === "start-change") { state.editingStart = true; return showPlan(); }
     if (t.id === "start-cancel") { state.editingStart = false; return showPlan(); }
     if (t.id === "start-clear") { state.trip.start = null; save(); renderMarkers(); return showPlan(); }
@@ -1861,6 +1924,32 @@
     if (d.id) return showSpot(d.id);
   });
   body.addEventListener("change", (e) => {
+    if (e.target.id === "stay-min") {
+      const sp = spotById(state.selected);
+      if (!sp) return;
+      sp.stay = Number(e.target.value);
+      save();
+      return toast(`Time at ${sp.name}: ${e.target.selectedOptions[0].textContent}. Your day's times are updated.`);
+    }
+    if (e.target.id === "dh-start" || e.target.id === "dh-end") {
+      const d = state.trip.days;
+      const start = $("dh-start").value, end = $("dh-end").value;
+      if (!start || !end) return;
+      if (toMin(end) <= toMin(start) + 60) {
+        toast("Make the end time at least an hour after the start.");
+        return showPlan(false);
+      }
+      d.hours = d.hours || [];
+      d.hours[d.current] = start === d.start && end === d.end ? null : { start, end };
+      save();
+      showPlan(false);
+      return toast(`Day ${d.current + 1}: ${start}–${end} ✓`);
+    }
+    if (e.target.id === "start-spot" && e.target.value) {
+      const sp = spotById(e.target.value);
+      if (sp) setStart({ name: sp.name, lat: sp.lat, lng: sp.lng, placeId: sp.placeId });
+      return;
+    }
     if (e.target.id === "it-start") {
       itinerary.startDate = e.target.value;
       saveItinerary();

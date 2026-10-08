@@ -63,8 +63,46 @@
     return r.json();
   }
 
-  // Places near the current map view.
-  async function searchPlaces(query, center) {
+  // Photon (komoot): free OpenStreetMap search that copes better with hotel
+  // names, partial names and typos than Nominatim. Biased to the map centre.
+  const OSM_TYPE = { N: "node", W: "way", R: "relation" };
+  function osmCategoryFromKey(key, value) {
+    if (key === "shop") return "shop";
+    if (["restaurant", "cafe", "bar", "pub", "fast_food", "ice_cream", "bakery"].includes(value)) return "food";
+    if (["hotel", "hostel", "guest_house", "apartment", "motel"].includes(value)) return "stay";
+    if (["viewpoint", "park", "garden", "artwork"].includes(value)) return "photo";
+    return "sight";
+  }
+  async function photon(query, center) {
+    const params = new URLSearchParams({ q: query, limit: "10" });
+    if (center) { params.set("lat", center.lat); params.set("lon", center.lng); }
+    const r = await fetch(`https://photon.komoot.io/api/?${params}`);
+    if (!r.ok) throw new Error("Search is busy");
+    const { features = [] } = await r.json();
+    return features.map((f) => {
+      const pr = f.properties || {};
+      const [lng, lat] = f.geometry.coordinates;
+      const street = [pr.street, pr.housenumber].filter(Boolean).join(" ");
+      return {
+        id: `o-${OSM_TYPE[pr.osm_type] || "node"}${pr.osm_id}`,
+        name: pr.name || street || query,
+        lat, lng,
+        address: [pr.name && street, pr.postcode, pr.city || pr.county, pr.country].filter(Boolean).join(", "),
+        category: osmCategoryFromKey(pr.osm_key, pr.osm_value),
+        source: "osm",
+      };
+    });
+  }
+  const km = (a, b) => {
+    const rad = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+    return 12742 * Math.asin(Math.sqrt(h));
+  };
+
+  // Places near the current map view. Free mode tries Photon, then
+  // Nominatim near the map, then Nominatim with the city name added.
+  async function searchPlaces(query, center, cityName) {
     if (google()) {
       const { Place } = await window.google.maps.importLibrary("places");
       const { places } = await Place.searchByText({
@@ -75,12 +113,31 @@
       });
       return places.map(fromGoogle);
     }
-    const d = 0.15; // ~15 km box around the map centre
-    const rows = await nominatim({
-      q: query, limit: "10", bounded: "1",
-      viewbox: [center.lng - d, center.lat + d, center.lng + d, center.lat - d].join(","),
-    });
-    return rows.map(fromOsm);
+    const nearby = (list) => list.filter((x) => km(center, x) <= 60);
+    let failures = 0;
+    const attempts = [
+      async () => nearby(await photon(query, center)),
+      async () => {
+        const d = 0.15; // ~15 km box around the map centre
+        return (await nominatim({
+          q: query, limit: "10", bounded: "1",
+          viewbox: [center.lng - d, center.lat + d, center.lng + d, center.lat - d].join(","),
+        })).map(fromOsm);
+      },
+      async () => cityName && !query.toLowerCase().includes(cityName.toLowerCase())
+        ? nearby((await nominatim({ q: `${query}, ${cityName}`, limit: "10" })).map(fromOsm))
+        : [],
+    ];
+    for (const attempt of attempts) {
+      try {
+        const found = await attempt();
+        if (found.length) return found;
+      } catch {
+        failures++;
+      }
+    }
+    if (failures >= 2) throw new Error("The free map search isn't responding right now. Check your connection, or use “Tap on map”.");
+    return [];
   }
 
   // A Google place the user tapped on the map.

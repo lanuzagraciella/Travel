@@ -164,8 +164,36 @@
         }
       }
     }
+    // Or-opt: move runs of 1–3 stops to a better place in the tour.
+    const len = (r) => r.reduce((t, p, i) => (i ? t + meters(r[i - 1], p) : 0), 0);
+    let bestLen = len(route);
+    for (let pass = 0, moved = true; moved && pass < 20; pass++) {
+      moved = false;
+      for (let seg = 1; seg <= 3; seg++) {
+        for (let i = 1; i + seg <= route.length; i++) {
+          const run = route.slice(i, i + seg);
+          const rest = route.slice(0, i).concat(route.slice(i + seg));
+          for (let j = 1; j <= rest.length; j++) {
+            if (j === i) continue;
+            for (const r of seg > 1 ? [run, run.slice().reverse()] : [run]) {
+              const trial = rest.slice(0, j).concat(r, rest.slice(j));
+              const l = len(trial);
+              if (l + 0.5 < bestLen) { route.splice(0, route.length, ...trial); bestLen = l; moved = true; }
+            }
+            if (moved) break;
+          }
+          if (moved) break;
+        }
+        if (moved) break;
+      }
+    }
     return route.map((p) => p.id).filter((id) => id !== null);
   }
+  const routeMeters = (ids) => {
+    let prev = state.trip.start, total = 0;
+    for (const s of ids.map(spotById).filter(Boolean)) { if (prev) total += meters(prev, s); prev = s; }
+    return total;
+  };
   if (!state.trip.plan) state.trip.plan = optimize(spots().filter((s) => s.category !== "stay").map((s) => s.id));
 
   function gmapsWalkUrl(stops) {
@@ -366,14 +394,14 @@
     }
     return `<form class="section form start-box" id="start-form">
       <h3>Where do you start?</h3>
-      <p class="hint">Your hotel, the station, or where you are now. The app orders your stops into the shortest walking tour from there.</p>
+      <p class="hint">Your hotel, the station, where you are now, or a Google Maps link (Share → Copy link). The app orders your stops into the shortest walking tour from there.</p>
       <div class="actions" style="margin-top:4px">
         <button class="btn" type="button" id="start-locate">${ICON("location")} My location</button>
         <button class="btn" type="button" id="start-pick">${ICON("pin")} Tap on map</button>
         ${start ? `<button class="btn" type="button" id="start-cancel">Cancel</button>` : ""}
       </div>
       <div class="search-row" style="margin-top:10px">
-        <input id="start-q" type="search" placeholder="Hotel, station or address" autocomplete="off" enterkeyhint="search" />
+        <input id="start-q" type="search" placeholder="Hotel, address, or paste a Google Maps link" autocomplete="off" enterkeyhint="search" />
         <button class="btn primary" type="submit">Find</button>
       </div>
       <p class="start-msg" id="start-msg" hidden></p>
@@ -449,7 +477,14 @@
     el.innerHTML = `<li class="hint">Searching…</li>`;
     let error = null;
     try {
-      state.startResults = await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
+      const link = await fromLink(q);
+      if (link?.place) {
+        el.innerHTML = "";
+        warnIfFar(link.place);
+        return setStart({ name: link.place.name, lat: link.place.lat, lng: link.place.lng });
+      }
+      state.startResults = link ? link.results
+        : await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
     } catch (err) {
       state.startResults = [];
       error = err.message;
@@ -459,6 +494,20 @@
         <button class="mini text" data-startresult="${i}">${ICON("flag")} Start here</button></li>`).join("");
     if (error) startMsg(error, "error");
     else if (!state.startResults.length) startMsg(`Nothing found for “${q.trim()}” near ${state.trip.name}. Check the spelling, add the street, or use “Tap on map”.`);
+  }
+
+  // A pasted Google Maps link (or "lat, lng"): {place} for an exact spot,
+  // {results} when the link only names a place, null when it isn't a link.
+  async function fromLink(text) {
+    if (!window.WPMapsLink.isLink(text)) return null;
+    const r = await window.WPMapsLink.resolve(text);
+    if (r.place) return r;
+    const near = r.near || cityCenter();
+    return { results: await window.WPPlaces.searchPlaces(r.query, near, meters(near, cityCenter()) < 30000 ? state.trip.name : "") };
+  }
+  function warnIfFar(p) {
+    const km = meters(p, cityCenter()) / 1000;
+    if (km > 40) setTimeout(() => toast(`Heads up: that place is ${Math.round(km)} km from ${state.trip.name}.`, 6000), 2500);
   }
 
   // The city's centre, so searches stay in this trip's city even while the
@@ -821,8 +870,19 @@
     // Trim days that run past the end time, then try to fit the extras into
     // the nearest day that still has room.
     days = days.map((ids, i) => {
-      const kept = ids.slice();
-      while (kept.length && !fits(kept, i)) leftover.push(kept.pop());
+      // Drop the stop that costs the most time (detour + visit), so as many
+      // attractions as possible still fit.
+      let kept = ids.slice();
+      while (kept.length && !fits(kept, i)) {
+        let best = null;
+        for (const id of kept) {
+          const trial = optimize(kept.filter((x) => x !== id));
+          const end = trial.length ? scheduleDay(trial, lim(i).s).endsAt : 0;
+          if (!best || end < best.end) best = { id, trial, end };
+        }
+        leftover.push(best.id);
+        kept = best.trial;
+      }
       return kept;
     });
     for (let i = leftover.length - 1; i >= 0; i--) {
@@ -850,6 +910,33 @@
       if (!fits(newLight, light.i) || freeOf(newLight, light.i) <= busy.free) break;
       days[light.i] = newLight;
       days[busy.i] = newBusy;
+    }
+    // Tidy up: move a stop to another day when it's closer to that day's
+    // stops, so every day stays in one area with less walking.
+    for (let pass = 0, moved = true; moved && pass < 4 && days.length > 1; pass++) {
+      moved = false;
+      for (let a = 0; a < days.length; a++) {
+        for (const id of days[a].slice()) {
+          if (days[a].length < 2) break;
+          const without = optimize(days[a].filter((x) => x !== id));
+          const saved = routeMeters(days[a]) - routeMeters(without);
+          let best = null;
+          days.forEach((ids, b) => {
+            if (b === a || !ids.length) return;
+            const withIt = optimize([...ids, id]);
+            const gain = saved - (routeMeters(withIt) - routeMeters(ids));
+            if (gain > 150 && fits(withIt, b) && (!best || gain > best.gain)) best = { b, withIt, gain };
+          });
+          if (best) { days[a] = without; days[best.b] = best.withIt; moved = true; }
+        }
+      }
+    }
+    for (let i = leftover.length - 1; i >= 0; i--) {
+      const id = leftover[i];
+      const best = days.map((ids, d) => ({ d, trial: optimize([...ids, id]) }))
+        .filter((x) => fits(x.trial, x.d))
+        .sort((x, y) => (routeMeters(x.trial) - routeMeters(days[x.d])) - (routeMeters(y.trial) - routeMeters(days[y.d])))[0];
+      if (best) { days[best.d] = best.trial; leftover.splice(i, 1); }
     }
     const current = Math.min(keepDay, count - 1);
     trip.days = { count, start, end, hours, list: days, leftover, current };
@@ -993,7 +1080,7 @@
           return long ? `<p class="hint">🚌 ${long} long walk${long > 1 ? "s" : ""} in this tour. Tap the yellow buttons for bus, tram and metro options.</p>` : "";
         })()}
         <div class="actions">
-          ${stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize">${ICON("sparkles")} Optimize</button>` : ""}
+          ${days || stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize" title="${days ? "Group spots into days by area and order each day as the shortest walk" : "Order stops as the shortest walk"}">${ICON("sparkles")} ${days ? "Optimize all days" : "Optimize"}</button>` : ""}
           ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">${ICON("walk")} Walk in Google Maps</a>` : ""}
           <button class="btn" id="btn-find">${ICON("search")} Add spots</button>
           <button class="btn" id="btn-drop-pin">${ICON("pin")} Drop a pin</button>
@@ -1143,7 +1230,7 @@
       <form class="section form" id="search-form">
         <label for="q">Search places</label>
         <div class="search-row">
-          <input id="q" type="search" placeholder="e.g. rooftop bar, flower market, Louvre" value="${esc(query)}" autocomplete="off" />
+          <input id="q" type="search" placeholder="e.g. Louvre, rooftop bar, or a Google Maps link" value="${esc(query)}" autocomplete="off" />
           <button class="btn primary" type="submit">Search</button>
         </div>
         <p class="hint">${google
@@ -1178,7 +1265,14 @@
     if (!q.trim()) return;
     $("results").innerHTML = `<li class="empty">Searching…</li>`;
     try {
-      state.results = await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
+      const link = await fromLink(q);
+      if (link?.place) {
+        warnIfFar(link.place);
+        const have = spots().find((s) => meters(s, link.place) < 15);
+        return have ? showSpot(have.id) : showPreview(link.place);
+      }
+      state.results = link ? link.results
+        : await window.WPPlaces.searchPlaces(q.trim(), cityCenter(), state.trip.name);
       state.lastQuery = q;
     } catch (err) {
       state.results = [];
@@ -1705,6 +1799,18 @@
     if (files.length === 1) openLightbox(state.lightbox.photos.length - 1);
   });
 
+  // Pasting a Google Maps link (or the text the Maps app shares) searches
+  // straight away. Line breaks are kept as commas so the name survives.
+  body.addEventListener("paste", (e) => {
+    const input = e.target;
+    if (input.id !== "start-q" && input.id !== "q") return;
+    const text = e.clipboardData?.getData("text") || "";
+    if (!window.WPMapsLink.isLink(text)) return;
+    e.preventDefault();
+    input.value = text.trim().split(/\s*\n+\s*/).join(", ");
+    input.form?.requestSubmit();
+  });
+
   body.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (e.target.id === "search-form") return runSearch($("q").value);
@@ -1757,6 +1863,18 @@
     const d = t.dataset;
 
     if (t.id === "btn-optimize") {
+      const dd = state.trip.days;
+      if (dd) {
+        save();
+        const before = dd.list.reduce((m, ids) => m + routeMeters(ids), 0);
+        const r = buildDays(dd.count, dd.start, dd.end, dd.current);
+        const after = state.trip.days.list.reduce((m, ids) => m + routeMeters(ids), 0);
+        const less = Math.round((before - after) / 80); // ~80 m a minute
+        toast(`Days grouped by area, each a walking tour${state.trip.start ? ` from ${state.trip.start.name}` : ""} ✨ ${r.text}${less > 0 ? ` · ${less} min less walking` : ""}`, 6000);
+        renderMarkers();
+        updateHeader();
+        return showPlan(false);
+      }
       state.trip.plan = optimize(plan());
       toast(state.trip.start ? `Shortest tour from ${state.trip.start.name} ✨` : "Route optimized ✨");
       return rerender();

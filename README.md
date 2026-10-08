@@ -12,7 +12,9 @@ home with the photos they had in mind.
 - **🗺️ Multi-city itinerary.** Under the city name → **My itinerary**, list the cities in order (e.g. Brussels, 2 nights → Bruges, day trip → Ghent, 1 night). Set a start date and each stay gets its dates. Between cities the app suggests **trains and buses** for your travel day (which train, platform-to-platform times, changes), with a Google Maps link as backup. The map shows the whole route, and **Open city** jumps into that city's day plan.
 - **Any other city.** Search for a city and the app automatically adds its most popular spots: nearby Wikipedia landmarks ranked by how many people read about them, with OpenStreetMap as a backup. **✨ Find popular spots** tops up any trip.
 - **Your own pins.** Use **📍 Drop pin** on the map, or **＋ Spot** to search for a place. Delete any pin with 🗑, either in the list or on the spot itself.
-- **🏁 Start point.** Search for your hotel, station or address (typo-tolerant; tries Photon, then OpenStreetMap near the city), use your current location, tap the map, or pick one of your saved spots, and the app orders your stops into the shortest walking tour from there. New stops slot into the tour automatically. **Walk it in Google Maps** opens turn-by-turn directions starting from your start point.
+- **🏁 Start point.** Search for your hotel, station or address (typo-tolerant; tries Photon, then OpenStreetMap near the city), **paste a Google Maps link**, use your current location, tap the map, or pick one of your saved spots, and the app orders your stops into the shortest walking tour from there. New stops slot into the tour automatically. **Walk it in Google Maps** opens turn-by-turn directions starting from your start point.
+- **🔗 Google Maps links.** In Google Maps, open a place and tap **Share → Copy link**, then paste it into "Where do you start?" or **＋ Spot**. Full links, short `maps.app.goo.gl` links, the text the Maps app shares, and plain coordinates (`50.8466, 4.3528`) all work. Short links are opened by a tiny Vercel function (`api/resolve-maps.js`) that only accepts Google Maps links; when running locally without it, the app falls back to searching the place's name.
+- **✨ Optimize.** Orders stops as the shortest walk from your start point (nearest-neighbour, then 2-opt and Or-opt to untangle and reshuffle). With a day plan, **Optimize all days** regroups your spots so each day covers one area, drops the stops that cost the most time first so more attractions fit, and moves stops to the day they're closest to.
 - **🚌 Bus, tram and metro.** Every leg of the tour has a **Transit** button showing which line to take, where to get on and off, how many stops, departure times and whether it beats walking. Long walks (15 min+) are flagged in yellow, and each spot has a **Getting here** section. Routes come from [Transitous](https://transitous.org), a free, community-run planner; a **Live times in Google Maps** link is always there as a backup.
 - **A spot panel** with photo, address, best light, shot ideas and **walking time to nearby spots**. Use ⤢ to expand it; on phones it's a bottom sheet.
 - **Pose-inspiration gallery.** Upload photos you want to recreate. Tap one to view it full screen while you shoot.
@@ -58,7 +60,7 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | File | What it is |
 | --- | --- |
 | `index.html` | Page layout |
-| `styles.css` | Apple-style look (system colours, materials, inset-grouped lists, light and dark mode), including the mobile bottom sheet |
+| `styles.css` | Apple-style look (system colours, materials, inset-grouped lists, always light), including the mobile bottom sheet |
 | `app.js` | Trips, panel, gallery, route optimizer, storage |
 | `maps.js` | Google Maps and OpenStreetMap map layers |
 | `places.js` | City and place search (Google Places or OpenStreetMap) |
@@ -66,6 +68,8 @@ Then add your host's address (e.g. `https://your-app.vercel.app/*`) to the Googl
 | `transit.js` | Bus, tram and metro routes (Transitous) |
 | `sun.js` | Sunrise, sunset and golden-hour times (computed on the device) |
 | `icons.js` | Line icons in the style of SF Symbols |
+| `mapslink.js` | Reads pasted Google Maps links |
+| `api/resolve-maps.js` | Vercel function that opens Google Maps short links |
 | `inspo.js` | Free-licence photos (Openverse), official post embeds and app searches |
 | `seed-posts.js` | Starter Pinterest/TikTok posts for the ready-made cities |
 | `data.js` | Brussels starter spots and categories |

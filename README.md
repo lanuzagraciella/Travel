@@ -27,6 +27,7 @@ home with the photos they had in mind.
   - **Save any post:** paste a Pinterest, TikTok, Instagram or RedNote link and it's kept on the spot, opening as the real post where the platform allows embedding.
   - Your own pose-photo uploads work as before.
 - **📕 RedNote (小红书) ideas.** Every spot has one-tap RedNote searches in Chinese, the way RedNote users write: camera spots (机位), poses (拍照姿势) and photos (拍照). Chinese place names come from Wikipedia automatically. Searches are always about that one spot, never the whole city; spots without a Wikipedia link are matched to the article at their location. Every stop in the day plan has a 📕 button, and each spot page has a **📕 Search on RedNote** button. Paste a RedNote share link to save a post to the spot. RedNote has no public API, so the app links to RedNote rather than showing its posts inside the app.
+- **📲 Opens your apps.** On a phone, RedNote and Instagram buttons open the installed app (RedNote straight to a search for that spot, Instagram to the spot's hashtag), and the search words are copied so you can paste them if the app opens on its home screen. If the app doesn't open, the app shows an **Open website** button instead.
 - **✨ AI photo coach.** Tap **How do I take this?** on an inspiration photo. Then share it to the free Claude app (or copy the ready-made question), and Claude explains how to recreate the shot with a phone camera. Paste the answer back to keep it with the photo.
 - **Photo progress.** The top bar tracks how many spots you've got your shot at.
 

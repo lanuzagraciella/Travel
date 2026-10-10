@@ -65,9 +65,18 @@
   const fmtDist = (m) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`);
 
   let toastTimer;
-  function toast(msg, ms = 4000) {
+  function toast(msg, ms = 4000, action = null) {
     const t = $("toast");
     t.textContent = msg;
+    if (action) {
+      const a = document.createElement("a");
+      a.className = "toast-action";
+      a.href = action.href;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = action.label;
+      t.append(" ", a);
+    }
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { t.hidden = true; }, ms);
@@ -572,6 +581,45 @@
   const spotSearchName = (spot) => spot.zh || spot.name.replace(/\s*\([^)]*\)$/, "");
   const spotRednoteUrl = (spot) => rednoteUrl(`${spotSearchName(spot)} 机位`);
 
+  // ----- Open searches in the installed apps -----
+  // On phones, RedNote and Instagram open in their apps (the search words
+  // are copied too, in case the app opens on its home screen). If the app
+  // doesn't open, the website is offered instead.
+  const MOBILE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const APP_URL = {
+    RedNote: (q) => `xhsdiscover://search/result?keyword=${encodeURIComponent(q)}`,
+    Instagram: (q) => `instagram://tag?name=${encodeURIComponent(q.replace(/^#/, ""))}`,
+  };
+  function openInApp(site, q, web) {
+    navigator.clipboard?.writeText(q).catch(() => {});
+    if (!MOBILE || !APP_URL[site]) {
+      window.open(web, "_blank", "noopener");
+      return toast(`Copied “${q}”. If ${site} opens without results, paste it into its search bar.`, 6000);
+    }
+    let left = false;
+    const away = () => { left = true; };
+    document.addEventListener("visibilitychange", away, { once: true });
+    window.addEventListener("pagehide", away, { once: true });
+    toast(`Opening ${site}… “${q}” is copied: paste it into the search bar if it isn't filled in.`, 8000);
+    location.href = APP_URL[site](q);
+    setTimeout(() => {
+      document.removeEventListener("visibilitychange", away);
+      window.removeEventListener("pagehide", away);
+      if (!left && !document.hidden) toast(`The ${site} app didn't open.`, 9000, { label: `Open ${site} website`, href: web });
+    }, 1800);
+  }
+  // Any link marked data-app opens through openInApp.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("a[data-app]");
+    if (!a) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openInApp(a.dataset.app, a.dataset.q, a.href);
+  }, true);
+  const appAttrs = (site, q) => `data-app="${site}" data-q="${esc(q)}"`;
+  const spotRednoteTerm = (spot) => `${spotSearchName(spot)} 机位`;
+
   function rednoteTerms(spot) {
     const base = spotSearchName(spot);
     const terms = [`${base} 机位`, `${base} 拍照姿势`, `${base} 拍照`];
@@ -617,7 +665,7 @@
     return `<div class="section inspo" id="rednote">
       <h3>Inspiration from travellers</h3>
       <p class="hint">See how others photographed ${esc(spot.name)}, then save the shots you want to recreate.</p>
-      <div class="app-links">${links.map((l) => `<a class="app-link ${SITE_CLASS[l.site]}" target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.site)}</a>`).join("")}</div>
+      <div class="app-links">${links.map((l) => `<a class="app-link ${SITE_CLASS[l.site]}" target="_blank" rel="noopener" href="${esc(l.url)}" ${appAttrs(l.site, l.q)}>${esc(l.site)}</a>`).join("")}</div>
       ${posts.length ? `<h4 class="posts-title">Saved posts</h4><ul class="plain posts">${posts.map((p, i) => {
         const embeddable = !!window.WPInspo.embedInfo(p.url);
         return `<li class="post">
@@ -715,7 +763,7 @@
     const box = $("rednote");
     if (box && state.selected === spot.id) box.outerHTML = rednoteHtml(spot);
     const top = $("rn-top");
-    if (top && state.selected === spot.id) top.href = spotRednoteUrl(spot);
+    if (top && state.selected === spot.id) { top.href = spotRednoteUrl(spot); top.dataset.q = spotRednoteTerm(spot); }
   }
 
   // Chinese names for every stop in the day plan, so each 📕 button searches
@@ -1106,7 +1154,7 @@
           <div class="row-poses" data-poses="${esc(s.id)}"></div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">${ICON("up")}</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">${ICON("down")}</button>
-        <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">${ICON("book")}</a>
+        <a class="mini rn-mini" target="_blank" rel="noopener" href="${spotRednoteUrl(s)}" ${appAttrs("RedNote", spotRednoteTerm(s))} title="Photo ideas for ${esc(s.name)} on RedNote" aria-label="${esc(s.name)} on RedNote">${ICON("book")}</a>
         <button class="mini" data-remove="${esc(s.id)}" title="Take out of today's plan (keeps the pin)" aria-label="Take out of today's plan">${ICON("minus")}</button>
         <button class="mini" data-delspot="${esc(s.id)}" title="Delete pin" aria-label="Delete pin">${ICON("trash")}</button>
       </li>`;
@@ -1187,7 +1235,7 @@
           ${spot.at ? `<button class="mini text" id="plan-at-clear">Clear</button>` : ""}</span>
         </label>
         <div class="actions">
-          <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">${ICON("book")} Ideas on RedNote</a>
+          <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}" ${appAttrs("RedNote", spotRednoteTerm(spot))}>${ICON("book")} Ideas on RedNote</a>
           <button class="btn ${inPlan ? "" : "primary"}" id="btn-toggle-plan">${inPlan ? `${ICON("check")} In my day` : `${ICON("plus")} Add to my day`}</button>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl([spot])}">${ICON("directions")} Directions</a>
           <a class="btn" target="_blank" rel="noopener" href="${gmapsPlaceUrl(spot)}">${ICON("map")} Google Maps</a>
@@ -1987,9 +2035,7 @@
     }
     if (d.rn !== undefined) {
       const term = state.rnTerms[Number(d.rn)];
-      navigator.clipboard?.writeText(term).catch(() => {});
-      window.open(rednoteUrl(term), "_blank", "noopener");
-      return toast(`Copied “${term}”. If RedNote opens without results, paste it into its search.`, 6000);
+      return openInApp("RedNote", term, rednoteUrl(term));
     }
     if (d.delpost !== undefined) {
       const spot = spotById(state.selected);

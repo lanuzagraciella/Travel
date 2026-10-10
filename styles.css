@@ -453,6 +453,7 @@ form.start-box select { width: 100%; }
   -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
   animation: toast-in 0.35s cubic-bezier(0.32, 0.72, 0, 1);
 }
+.toast-action { color: var(--tint); font-weight: 600; text-decoration: none; white-space: nowrap; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px) scale(0.96); } }
 
 /* ---------- Photo viewer + guide ---------- */

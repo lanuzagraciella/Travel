@@ -91,11 +91,13 @@
   function searchLinks(spot, zhName) {
     const q = `${spot.name.replace(/\s*\([^)]*\)$/, "")} photo ideas`;
     const tag = spot.name.replace(/\s*\([^)]*\)$/, "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    const clean = spot.name.replace(/\s*\([^)]*\)$/, "");
+    const tt = `${clean} photo spot`, rn = `${zhName || clean} 机位`;
     return [
-      { site: "Pinterest", url: `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(q)}` },
-      { site: "TikTok", url: `https://www.tiktok.com/search?q=${encodeURIComponent(`${spot.name} photo spot`)}` },
-      { site: "Instagram", url: `https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/` },
-      { site: "RedNote", url: `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(`${zhName || spot.name} 机位`)}` },
+      { site: "Pinterest", q, url: `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(q)}` },
+      { site: "TikTok", q: tt, url: `https://www.tiktok.com/search?q=${encodeURIComponent(tt)}` },
+      { site: "Instagram", q: tag, url: `https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/` },
+      { site: "RedNote", q: rn, url: `https://www.xiaohongshu.com/search_result?keyword=${encodeURIComponent(rn)}` },
     ];
   }
 

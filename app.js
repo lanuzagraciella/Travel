@@ -99,6 +99,32 @@
     if (!trips.some((x) => x.id === t.id)) trips.push({ ...structuredClone(t), plan: null, done: [] });
   }
   store.set("seeded", seeded);
+  // The Paris weekend plan (Saturday + Sunday), added once to the Paris trip.
+  const weekend = window.SEED_PARIS_WEEKEND;
+  if (weekend && !store.get("parisWeekend", false)) {
+    let paris = trips.find((t) => t.id === "paris");
+    const seedParis = (window.SEED_TRIPS || []).find((t) => t.id === "paris");
+    if (!paris && seedParis) trips.push(paris = { ...structuredClone(seedParis), plan: null, done: [] });
+    if (paris) {
+      const list = weekend.days.map((day) => day.map(({ ref, at, stay, note, ...spot }) => {
+        let sp = paris.spots.find((x) => x.id === (ref || spot.id));
+        if (!sp && ref) sp = structuredClone(seedParis.spots.find((x) => x.id === ref));
+        if (!sp) sp = { ...spot };
+        if (!paris.spots.includes(sp)) paris.spots.push(sp);
+        Object.assign(sp, { stay, note });
+        if (at) sp.at = at; else delete sp.at;
+        delete sp.skip;
+        return sp.id;
+      }));
+      paris.start = { ...weekend.start };
+      paris.days = { count: list.length, start: weekend.hours[1].start, end: weekend.hours[0].end,
+        hours: structuredClone(weekend.hours), names: weekend.names.slice(), list, leftover: [], current: 0 };
+      paris.plan = list[0].slice();
+      store.set("activeTrip", "paris");
+      store.set("trips", trips);
+    }
+    store.set("parisWeekend", true);
+  }
   // Starter inspiration posts for the ready-made cities (added once per spot,
   // so posts you remove stay removed).
   for (const t of trips) for (const sp of t.spots) {
@@ -189,6 +215,8 @@
     }
     return route.map((p) => p.id).filter((id) => id !== null);
   }
+  // A day with planned times keeps your order; otherwise it's optimized.
+  const reorder = (ids) => (ids.some((id) => spotById(id)?.at) ? ids.slice() : optimize(ids));
   const routeMeters = (ids) => {
     let prev = state.trip.start, total = 0;
     for (const s of ids.map(spotById).filter(Boolean)) { if (prev) total += meters(prev, s); prev = s; }
@@ -423,7 +451,7 @@
       .map((ids, d) => ({ d, dist: ids.length ? Math.min(...ids.map((x) => meters(spotById(x) || s, s))) : 1e9 }))
       .sort((a, b) => a.dist - b.dist);
     for (const { d } of options) {
-      const trial = optimize([...days.list[d], id]);
+      const trial = reorder([...days.list[d], id]);
       const h = hoursOf(d);
       if (scheduleDay(trial, toMin(h.start)).endsAt <= toMin(h.end)) {
         days.list[d] = trial;
@@ -443,13 +471,13 @@
     if (state.trip.days) state.trip.days.leftover = state.trip.days.leftover.filter((x) => x !== id);
     if (plan().includes(id)) return;
     plan().push(id);
-    if (state.trip.start) state.trip.plan = optimize(plan());
+    if (state.trip.start) state.trip.plan = reorder(plan());
   }
 
   function setStart(start) {
     state.trip.start = start;
     state.editingStart = false;
-    state.trip.plan = optimize(plan());
+    state.trip.plan = reorder(plan());
     save();
     renderMarkers();
     updateHeader();
@@ -817,13 +845,21 @@
     const items = [];
     for (const s of stops) {
       if (prev) t += walkMin(prev, s);
+      // A planned time ("at") wins over the estimate; flag it when the walk
+      // there would make you more than 10 minutes late.
+      let tight = false;
+      if (s.at) {
+        tight = t > toMin(s.at) + 10;
+        t = toMin(s.at);
+        lunched ||= t >= LUNCH_AT && stops.some((x) => x.at); // a timed day has its own meal plan
+      }
       if (!lunched && t >= LUNCH_AT) {
         items.push({ type: "lunch", at: t });
         t += LUNCH_MIN;
         lunched = true;
       }
       const stay = visitMin(s);
-      items.push({ type: "stop", id: s.id, arrive: t, leave: t + stay });
+      items.push({ type: "stop", id: s.id, arrive: t, leave: t + stay, fixed: !!s.at, tight });
       t += stay;
       prev = s;
     }
@@ -855,6 +891,16 @@
     }
     return groups;
   }
+
+  // Re-planning reorders stops, so planned (locked) times can't stay.
+  function okToReplan() {
+    const timed = spots().filter((x) => x.at);
+    if (!timed.length) return true;
+    if (!confirm(`${timed.length} stops have planned times (🔒). Re-planning reorders your days and clears those times. Continue?`)) return false;
+    timed.forEach((x) => delete x.at);
+    return true;
+  }
+  const dayName = (i, d = state.trip.days) => d?.names?.[i] || `Day ${i + 1}`;
 
   // Returns a short summary of what changed, for the toast.
   function buildDays(count, start, end, keepDay = 0, resetHours = false) {
@@ -939,7 +985,8 @@
       if (best) { days[best.d] = best.trial; leftover.splice(i, 1); }
     }
     const current = Math.min(keepDay, count - 1);
-    trip.days = { count, start, end, hours, list: days, leftover, current };
+    const names = (trip.days?.names || []).slice(0, count);
+    trip.days = { count, start, end, hours, list: days, leftover, current, ...(names.length ? { names } : {}) };
     trip.plan = days[current].slice();
     save();
     const stops = days.reduce((n, d) => n + d.length, 0);
@@ -998,13 +1045,13 @@
     const over = sched.endsAt > toMin(h.end);
     const custom = !!d.hours?.[d.current];
     return `<div class="section days-box">
-      <div class="day-chips">${d.list.map((ids, i) => `<button class="day-chip ${i === d.current ? "on" : ""}" data-day="${i}">Day ${i + 1}<small>${ids.length} stops</small></button>`).join("")}</div>
-      <p class="day-line"><b>${date ? fmtDay(date) : `Day ${d.current + 1}`}</b> · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs past ${esc(h.end)}: tap Rebuild to move stops</span>` : ""}</p>
+      <div class="day-chips">${d.list.map((ids, i) => `<button class="day-chip ${i === d.current ? "on" : ""}" data-day="${i}">${esc(dayName(i))}<small>${ids.length} stops</small></button>`).join("")}</div>
+      <p class="day-line"><b>${date ? fmtDay(date) : esc(dayName(d.current))}</b> · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs past ${esc(h.end)}: tap Rebuild to move stops</span>` : ""}</p>
       <div class="day-hours">
-        <span>Day ${d.current + 1} hours</span>
-        <input type="time" id="dh-start" value="${esc(h.start)}" aria-label="Day ${d.current + 1} start time" />
+        <span>${esc(dayName(d.current))} hours</span>
+        <input type="time" id="dh-start" value="${esc(h.start)}" aria-label="${esc(dayName(d.current))} start time" />
         <span>–</span>
-        <input type="time" id="dh-end" value="${esc(h.end)}" aria-label="Day ${d.current + 1} end time" />
+        <input type="time" id="dh-end" value="${esc(h.end)}" aria-label="${esc(dayName(d.current))} end time" />
         ${custom ? `<button class="mini text" id="dh-reset" title="Use the default hours (${esc(d.start)}–${esc(d.end)})">Reset</button>` : ""}
       </div>
       <p class="hint">🌅 Sunrise ${t(sun.sunrise)}, golden light until ${t(sun.goldenMorningEnd)} · 🌇 golden light from ${t(sun.goldenEveningStart)}, sunset ${t(sun.sunset)}${date ? "" : " (today)"}</p>
@@ -1031,7 +1078,7 @@
     state.selected = null;
     const days = state.trip.days;
     const dDate = days ? dayDate(days.current) : null;
-    setHeading(days ? `Day ${days.current + 1}${dDate ? ` · ${fmtDay(dDate)}` : ""} · ${state.trip.name}` : `My day in ${state.trip.name}`, false);
+    setHeading(days ? `${dayName(days.current)}${dDate ? ` · ${fmtDay(dDate)}` : ""} · ${state.trip.name}` : `My day in ${state.trip.name}`, false);
     const stops = plan().map(spotById).filter(Boolean);
     const sched = days ? scheduleDay(plan(), toMin(hoursOf(days.current).start)) : null;
     const timeOf = (id) => sched?.items.find((x) => x.type === "stop" && x.id === id);
@@ -1054,7 +1101,8 @@
       return `${leg}${lunch ? `<li class="leg lunch">🍽️ ${fmtClock(lunch.at)} Lunch break (1 h)</li>` : ""}<li data-id="${esc(s.id)}">
         <span class="stop-letter" style="background:${cat.color}">${LETTERS[i] || "•"}</span>
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
-          <div class="stop-meta">${time ? `<b class="time">${fmtClock(time.arrive)}–${fmtClock(time.leave)}</b> · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
+          <div class="stop-meta">${time ? `<b class="time">${time.fixed ? "🔒 " : ""}${fmtClock(time.arrive)}${time.leave > time.arrive ? `–${fmtClock(time.leave)}` : " walk-by"}</b>${time.tight ? ` <span class="warn" title="The walk here takes longer than your plan allows">tight</span>` : ""} · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
+          ${s.note ? `<div class="stop-note">${esc(s.note)}</div>` : ""}
           <div class="row-poses" data-poses="${esc(s.id)}"></div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">${ICON("up")}</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">${ICON("down")}</button>
@@ -1129,9 +1177,14 @@
         <span class="chip">${cat.emoji} ${cat.label}</span>
         ${detailsHtml(spot)}
         ${spot.bestTime ? `<p>🕒 <b>Best light:</b> ${esc(spot.bestTime)}</p>` : ""}
+        ${spot.note ? `<p>📝 ${esc(spot.note)}</p>` : ""}
         <label class="stay-label">${ICON("clock")} Time here
-          <select id="stay-min">${[15, 30, 45, 60, 90, 120, 150, 180].map((m) =>
-            `<option value="${m}" ${visitMin(spot) === m ? "selected" : ""}>${m < 60 ? `${m} min` : `${m / 60} h`.replace(".5 h", " h 30")}</option>`).join("")}</select>
+          <select id="stay-min">${[...new Set([0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, visitMin(spot)])].sort((a, b) => a - b).map((m) =>
+            `<option value="${m}" ${visitMin(spot) === m ? "selected" : ""}>${m === 0 ? "Walk-by" : fmtMin(m).replace(/ 0 min$/, "")}</option>`).join("")}</select>
+        </label>
+        <label class="stay-label">${ICON("calendar")} Planned time
+          <span class="at-row"><input type="time" id="plan-at" value="${esc(spot.at || "")}" aria-label="Planned arrival time" />
+          ${spot.at ? `<button class="mini text" id="plan-at-clear">Clear</button>` : ""}</span>
         </label>
         <div class="actions">
           <a class="btn rn-btn" id="rn-top" target="_blank" rel="noopener" href="${spotRednoteUrl(spot)}">${ICON("book")} Ideas on RedNote</a>
@@ -1823,6 +1876,7 @@
       if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
         return toast("Add some spots first: tap “Popular spots” or “Add spots”, then build your days.");
       }
+      if (!okToReplan()) return;
       state.editingDays = false;
       const keep = state.trip.days && state.trip.days.count === count ? state.trip.days.current : 0;
       const res = buildDays(count, start, end, keep, true);
@@ -1863,6 +1917,7 @@
     const d = t.dataset;
 
     if (t.id === "btn-optimize") {
+      if (!okToReplan()) return;
       const dd = state.trip.days;
       if (dd) {
         save();
@@ -1882,6 +1937,11 @@
     if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
     if (t.id === "btn-popular") return addPopularSpots(false);
     if (d.day !== undefined) return selectDay(Number(d.day));
+    if (t.id === "plan-at-clear") {
+      const sp = spotById(state.selected);
+      if (sp) { delete sp.at; save(); showSpot(sp.id); toast(`${sp.name} follows the walking estimate again.`); }
+      return;
+    }
     if (t.id === "dh-reset") {
       const d = state.trip.days;
       if (d.hours) d.hours[d.current] = null;
@@ -1895,6 +1955,7 @@
       if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
         return toast("There are no spots to plan yet. Tap “Popular spots” or “Add spots” first.");
       }
+      if (!okToReplan()) return;
       const res = buildDays(dd.count, dd.start, dd.end, dd.current);
       renderMarkers(); updateHeader(); showPlan();
       return toast(res.changed
@@ -2049,6 +2110,14 @@
       save();
       return toast(`Time at ${sp.name}: ${e.target.selectedOptions[0].textContent}. Your day's times are updated.`);
     }
+    if (e.target.id === "plan-at") {
+      const sp = spotById(state.selected);
+      if (!sp) return;
+      if (e.target.value) sp.at = e.target.value; else delete sp.at;
+      save();
+      showSpot(sp.id);
+      return toast(sp.at ? `${sp.name} locked at ${sp.at} 🔒` : `${sp.name} follows the walking estimate again.`);
+    }
     if (e.target.id === "dh-start" || e.target.id === "dh-end") {
       const d = state.trip.days;
       const start = $("dh-start").value, end = $("dh-end").value;
@@ -2061,7 +2130,7 @@
       d.hours[d.current] = start === d.start && end === d.end ? null : { start, end };
       save();
       showPlan(false);
-      return toast(`Day ${d.current + 1}: ${start}–${end} ✓`);
+      return toast(`${dayName(d.current)}: ${start}–${end} ✓`);
     }
     if (e.target.id === "start-spot" && e.target.value) {
       const sp = spotById(e.target.value);

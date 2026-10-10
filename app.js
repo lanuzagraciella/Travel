@@ -69,11 +69,10 @@
     const t = $("toast");
     t.textContent = msg;
     if (action) {
-      const a = document.createElement("a");
+      const a = document.createElement(action.href ? "a" : "button");
       a.className = "toast-action";
-      a.href = action.href;
-      a.target = "_blank";
-      a.rel = "noopener";
+      if (action.href) Object.assign(a, { href: action.href, target: "_blank", rel: "noopener" });
+      else a.onclick = () => { t.hidden = true; action.onClick(); };
       a.textContent = action.label;
       t.append(" ", a);
     }
@@ -948,6 +947,38 @@
     timed.forEach((x) => delete x.at);
     return true;
   }
+  // Undo for Optimize / Rebuild / Build my days: a copy of the plan (and
+  // the planned times) from just before, kept with the trip until undone
+  // or replaced by the next re-plan.
+  function snapshot(label) {
+    save();
+    return {
+      label, at: Date.now(),
+      plan: plan() ? plan().slice() : null,
+      days: state.trip.days ? structuredClone(state.trip.days) : null,
+      times: Object.fromEntries(spots().filter((x) => x.at).map((x) => [x.id, x.at])),
+    };
+  }
+  const UNDO = { label: "Undo", onClick: () => undoReplan() };
+  function keepUndo(snap) { state.trip.undo = snap; save(); }
+  function undoReplan() {
+    const u = state.trip.undo;
+    if (!u) return;
+    const known = new Set(spots().map((x) => x.id));
+    for (const sp of spots()) { if (u.times[sp.id]) sp.at = u.times[sp.id]; else delete sp.at; }
+    if (u.days) {
+      u.days.list = u.days.list.map((ids) => ids.filter((id) => known.has(id)));
+      u.days.leftover = (u.days.leftover || []).filter((id) => known.has(id));
+    }
+    state.trip.days = u.days;
+    state.trip.plan = (u.days ? u.days.list[u.days.current] : (u.plan || [])).filter((id) => known.has(id));
+    delete state.trip.undo;
+    save();
+    renderMarkers();
+    updateHeader();
+    showPlan(false);
+    toast("Back to your plan from before ↩︎", 5000);
+  }
   const dayName = (i, d = state.trip.days) => d?.names?.[i] || `Day ${i + 1}`;
 
   // Returns a short summary of what changed, for the toast.
@@ -1176,6 +1207,7 @@
           return long ? `<p class="hint">🚌 ${long} long walk${long > 1 ? "s" : ""} in this tour. Tap the yellow buttons for bus, tram and metro options.</p>` : "";
         })()}
         <div class="actions">
+          ${state.trip.undo ? `<button class="btn undo-btn" id="btn-undo" title="Go back to how your plan was before">${ICON("undo")} Undo ${esc(state.trip.undo.label)} <small>(${fmtClock(new Date(state.trip.undo.at).getHours() * 60 + new Date(state.trip.undo.at).getMinutes())})</small></button>` : ""}
           ${days || stops.length > (start ? 1 : 2) ? `<button class="btn primary" id="btn-optimize" title="${days ? "Group spots into days by area and order each day as the shortest walk" : "Order stops as the shortest walk"}">${ICON("sparkles")} ${days ? "Optimize all days" : "Optimize"}</button>` : ""}
           ${stops.length ? `<a class="btn" target="_blank" rel="noopener" href="${gmapsWalkUrl(walk)}">${ICON("walk")} Walk in Google Maps</a>` : ""}
           <button class="btn" id="btn-find">${ICON("search")} Add spots</button>
@@ -1924,7 +1956,9 @@
       if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
         return toast("Add some spots first: tap “Popular spots” or “Add spots”, then build your days.");
       }
+      const snap = snapshot("day plan");
       if (!okToReplan()) return;
+      keepUndo(snap);
       state.editingDays = false;
       const keep = state.trip.days && state.trip.days.count === count ? state.trip.days.current : 0;
       const res = buildDays(count, start, end, keep, true);
@@ -1964,8 +1998,11 @@
     if (!t || t.tagName === "A") return;
     const d = t.dataset;
 
+    if (t.id === "btn-undo") return undoReplan();
     if (t.id === "btn-optimize") {
+      const snap = snapshot("optimize");
       if (!okToReplan()) return;
+      keepUndo(snap);
       const dd = state.trip.days;
       if (dd) {
         save();
@@ -1973,13 +2010,13 @@
         const r = buildDays(dd.count, dd.start, dd.end, dd.current);
         const after = state.trip.days.list.reduce((m, ids) => m + routeMeters(ids), 0);
         const less = Math.round((before - after) / 80); // ~80 m a minute
-        toast(`Days grouped by area, each a walking tour${state.trip.start ? ` from ${state.trip.start.name}` : ""} ✨ ${r.text}${less > 0 ? ` · ${less} min less walking` : ""}`, 6000);
+        toast(`Days grouped by area, each a walking tour${state.trip.start ? ` from ${state.trip.start.name}` : ""} ✨ ${r.text}${less > 0 ? ` · ${less} min less walking` : ""}`, 8000, UNDO);
         renderMarkers();
         updateHeader();
         return showPlan(false);
       }
       state.trip.plan = optimize(plan());
-      toast(state.trip.start ? `Shortest tour from ${state.trip.start.name} ✨` : "Route optimized ✨");
+      toast(state.trip.start ? `Shortest tour from ${state.trip.start.name} ✨` : "Route optimized ✨", 8000, UNDO);
       return rerender();
     }
     if (d.leg) { e.stopPropagation(); return toggleTransit(d.leg, t); }
@@ -2003,12 +2040,14 @@
       if (!spots().some((x) => x.category !== "stay" && !x.skip)) {
         return toast("There are no spots to plan yet. Tap “Popular spots” or “Add spots” first.");
       }
+      const snap = snapshot("rebuild");
       if (!okToReplan()) return;
+      keepUndo(snap);
       const res = buildDays(dd.count, dd.start, dd.end, dd.current);
       renderMarkers(); updateHeader(); showPlan();
       return toast(res.changed
         ? `Rebuilt: ${res.text} ✨`
-        : `Already the best plan for these spots (${res.text}). Add, remove or change hours, then rebuild.`, 6000);
+        : `Already the best plan for these spots (${res.text}). Add, remove or change hours, then rebuild.`, 8000, UNDO);
     }
     if (d.ccpose !== undefined) {
       const item = state.ccItems?.[Number(d.ccpose)];

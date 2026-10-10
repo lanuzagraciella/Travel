@@ -373,7 +373,7 @@ window.SEED_SPOTS = [
     stop("20:05", 5, "5 min walk", "pw-pont-neuf", "Henri IV Statue & Pont Neuf", "photo", 48.8571638, 2.3409791, "15 Pl. du Pont-Neuf, 75001 Paris, France", "Quick photo stop next to the pier.", "FREE public monument", "Statue Henri IV Pont Neuf Paris", "Pont_Neuf"),
     stop("20:15", 30, "2 min walk", "pw-dinner", "Snack & arrive early at the pier", "food", 48.8566, 2.3423, "Place Dauphine / Pont Neuf, 75001 Paris, France", "Grab a crêpe or sandwich nearby, then check in at the pier. Dinner is after the cruise, near the hotel.", "Takeaway food: allow 15–20 minutes · Arrive at the pier by 20:45 (21:00 latest per ticket)", "crêpes near Pont Neuf Paris"),
     stop("20:45", 105, "-", "pw-cruise", "Seine Cruise (Vedettes du Pont Neuf)", "sight", 48.8574484, 2.3409317, "1 Square du Vert Galant, 75001 Paris, France", "Arrive by 20:45 for the 21:15 departure.", "BOOKED · Arrive 20:45; 21:00 latest per ticket · Departs 21:15 · Allow until 22:30 for return", "Vedettes du Pont Neuf Paris"),
-    stop("23:00", 55, null, "pw-bacchantes", "Dinner: Les Bacchantes (escargots)", "food", 48.8714616, 2.3280306, "21 Rue de Caumartin, 75009 Paris, France", "Escargot dinner, a 5 min walk from the hotel. Book a 23:00 table and check the kitchen still takes orders then: 01 42 65 25 35.", "Open until midnight · escargots praised in 2025 reviews · 4.4★ · Backup: Bouillon Chartier (escargots always on the menu, open until midnight, no bookings)", "Les Bacchantes, 21 Rue de Caumartin, 75009 Paris"),
+    stop("23:00", 55, null, "pw-bacchantes", "Dinner: Les Bacchantes (escargots)", "food", 48.8714616, 2.3280306, "21 Rue de Caumartin, 75009 Paris, France", "Escargot dinner, a 5 min walk from the hotel. Book a 23:00 table and check the kitchen still takes orders then: 01 42 65 25 35.", "Open until midnight · escargots praised in 2025 reviews · 4.4★ · Backup: Bouillon Pigalle (escargots, open until midnight, 4.6★)", "Les Bacchantes, 21 Rue de Caumartin, 75009 Paris"),
   ];
   // The doc's travel rows belong to the stop they lead to.
   day1[1].via = via("20 min Metro", { at: "16:10", label: "Metro to the Marais", note: "Take the metro to the Archives area." });
@@ -383,7 +383,7 @@ window.SEED_SPOTS = [
     note: "Walk 3 min to Pont Neuf station, ride line 7 (direction La Courneuve) 3 stops to Opéra, then walk 4 min up Rue de Caumartin." };
   // Pins kept on the map but not in a day: the backup dinner spot.
   const extras = [
-    stop(null, 0, null, "pw-chartier", "Backup dinner: Bouillon Chartier", "food", 48.8719224, 2.3430304, "7 Rue du Faubourg Montmartre, 75009 Paris, France", "Backup if Les Bacchantes can't seat you at 23:00. Iconic 1896 dining hall, escargots always on the menu, about €15 a dozen. No bookings, so expect a queue.", "Open until midnight · 4.1★ · about 15 min walk from the hotel", "Bouillon Chartier Grands Boulevards, 7 Rue du Faubourg Montmartre, 75009 Paris"),
+    stop(null, 0, null, "pw-bouillon-pigalle", "Backup dinner: Bouillon Pigalle", "food", 48.8826242, 2.3374171, "22 Bd de Clichy, 75018 Paris, France", "Backup if Les Bacchantes can't seat you at 23:00. Escargots in garlic butter are a reviewers' favourite, at bouillon prices. Book on the website or expect a queue. Getting back: metro line 12 Pigalle → Trinité (3 stops), then 3 min walk to the hotel.", "Open until midnight · 4.6★ (57k reviews) · about 1 km from the hotel · +33 1 42 59 69 31", "Bouillon Pigalle, 22 Boulevard de Clichy, 75018 Paris"),
   ];
   const day2 = [
     stop("08:35", 0, "5 min walk", "pw-cour-rome", "Gare Saint-Lazare - Cour de Rome", "photo", 48.8758885, 2.3240292, "Cour de Rome, 75008 Paris, France", "Quick photo without stopping.", "", "Cour de Rome Gare Saint-Lazare Paris", "Gare_Saint-Lazare"),
@@ -421,7 +421,7 @@ window.SEED_SPOTS = [
     stop("14:00", 29, "5 min walk", "pw-hotel", "Residhome Paris Opéra", "stay", 48.874757, 2.32909, "30 Rue Joubert, 75009 Paris, France", "Arrive at the hotel to grab your luggage and prepare to leave.", "", "Residhome Paris Opéra, 30 Rue Joubert, 75009 Paris"),
   ];
   window.SEED_PARIS_WEEKEND = {
-    version: 5,
+    version: 6,
     start: { name: "Residhome Paris Opéra", lat: 48.874757, lng: 2.32909 },
     names: ["Saturday", "Sunday"],
     titles: ["The Marais, Latin Quarter & Seine Walk", "West Paris, Eiffel Tower & Louvre"],
@@ -433,7 +433,7 @@ window.SEED_SPOTS = [
     finish: [{ at: "00:00", name: "Back at the hotel", note: "5 min walk from Les Bacchantes to 30 Rue Joubert." },
       { at: "14:29", name: "Departure", note: "Leave hotel to catch Metro 12." }],
     hours: [{ start: "16:00", end: "23:59" }, { start: "08:30", end: "14:29" }],
-    removed: [],
+    removed: ["pw-chartier"],
     days: [day1, day2],
     extras,
   };

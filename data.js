@@ -349,18 +349,18 @@ window.SEED_SPOTS = [
     ({ at, stay, via: via(how), id, name, category, lat, lng, address, note, info, gmaps, wiki, poses: [] });
   const part = (row) => `Part of the ${row} stop.`;
   const day1 = [
-    stop("15:35", 5, "5 min walk", "pw-garnier", "Opéra Garnier (Exterior)", "sight", 48.8719697, 2.3316014, "Pl. de l'Opéra, 75009 Paris, France", "Exterior photos only.", "Paid inside · closes 17:00", "Opéra Garnier", "Palais_Garnier"),
-    stop("16:00", 30, null, "pw-soubise", "National Archives / Hôtel de Soubise", "sight", 48.8604062, 2.3577888, "60 Rue des Francs Bourgeois, 75003 Paris, France", "Free interior access; closes at 17:30.", "FREE inside; standard close 17:30 · Brief visit", "Hôtel de Soubise Paris", "Hôtel_de_Soubise"),
-    stop("16:30", 5, "5 min walk", "pw-lamoignon", "Hôtel de Lamoignon", "photo", 48.8569229, 2.3618595, "24 Rue Pavée, 75004 Paris, France", "Quick courtyard photo.", "Quick courtyard photo if accessible · Library closes 18:00; no palace tour", "Hôtel de Lamoignon Paris", "Hôtel_Lamoignon"),
-    stop("16:40", 5, "5 min walk", "pw-carnavalet", "Carnavalet (Exterior)", "sight", 48.8570669, 2.3628579, "23 Rue de Sévigné, 75003 Paris, France", "Exterior photo stop.", "Permanent collection FREE · Last entry 17:15; closes 18:00 · Courtyard access not guaranteed", "Musée Carnavalet Paris", "Musée_Carnavalet"),
-    stop("16:50", 10, "5 min walk", "pw-vosges", "Place des Vosges", "photo", 48.8556114, 2.3655266, "Pl. des Vosges, 75004 Paris, France", "Free square and arcades.", "FREE square / arcades · Central garden has gates", "Place des Vosges Paris", "Place_des_Vosges"),
-    stop("17:05", 5, "5 min walk", "pw-sully", "Hôtel de Sully", "photo", 48.8543941, 2.3637542, "62 Rue Saint-Antoine, 75004 Paris, France", "Quick exterior/courtyard photo stop.", "FREE courtyard & garden; closes 19:00 · Interiors not freely open", "Hôtel de Sully Paris", "Hôtel_de_Sully"),
+    stop("16:05", 5, "5 min walk", "pw-garnier", "Opéra Garnier (Exterior)", "sight", 48.8719697, 2.3316014, "Pl. de l'Opéra, 75009 Paris, France", "Exterior photos only.", "Paid inside · closes 17:00", "Opéra Garnier", "Palais_Garnier"),
+    stop("16:30", 25, null, "pw-soubise", "National Archives / Hôtel de Soubise", "sight", 48.8604062, 2.3577888, "60 Rue des Francs Bourgeois, 75003 Paris, France", "Free interior access; closes at 17:30.", "FREE inside; standard close 17:30 · Brief visit", "Hôtel de Soubise Paris", "Hôtel_de_Soubise"),
+    stop("17:00", 5, "5 min walk", "pw-lamoignon", "Hôtel de Lamoignon", "photo", 48.8569229, 2.3618595, "24 Rue Pavée, 75004 Paris, France", "Quick courtyard photo.", "Quick courtyard photo if accessible · Library closes 18:00; no palace tour", "Hôtel de Lamoignon Paris", "Hôtel_Lamoignon"),
+    stop("17:10", 5, "5 min walk", "pw-carnavalet", "Carnavalet (Exterior)", "sight", 48.8570669, 2.3628579, "23 Rue de Sévigné, 75003 Paris, France", "Exterior photo stop.", "Permanent collection FREE · Last entry 17:15; closes 18:00 · Courtyard access not guaranteed", "Musée Carnavalet Paris", "Musée_Carnavalet"),
+    stop("17:20", 10, "5 min walk", "pw-vosges", "Place des Vosges", "photo", 48.8556114, 2.3655266, "Pl. des Vosges, 75004 Paris, France", "Free square and arcades.", "FREE square / arcades · Central garden has gates", "Place des Vosges Paris", "Place_des_Vosges"),
+    stop("17:35", 5, "5 min walk", "pw-sully", "Hôtel de Sully", "photo", 48.8543941, 2.3637542, "62 Rue Saint-Antoine, 75004 Paris, France", "Quick exterior/courtyard photo stop.", "FREE courtyard & garden; closes 19:00 · Interiors not freely open", "Hôtel de Sully Paris", "Hôtel_de_Sully"),
     stop(null, 0, null, "pw-st-paul", "Saint-Paul-Saint-Louis", "sight", 48.8544675, 2.3614508, "99 Rue Saint-Antoine, 75004 Paris, France", "Walk-by on the Left Bank walk.", "FREE church; closes 20:00 · Exterior photo; skip if running late", "Église Saint-Paul-Saint-Louis Paris", "Saint-Paul-Saint-Louis"),
     stop(null, 0, null, "pw-pont-sully", "Pont de Sully", "photo", 48.8498408, 2.3580242, "Quai de la Tournelle, Bd Henri IV, 75005 Paris, France", "Walk-by on the Left Bank walk.", "FREE public bridge / quick photo", "Pont de Sully Paris", "Pont_de_Sully"),
     stop(null, 0, null, "pw-ima", "Arab World Institute (Exterior)", "sight", 48.8489257, 2.3572313, "1 Rue des Fossés Saint-Bernard, 75005 Paris, France", "Walk-by on the Left Bank walk.", "Museum ticketed; weekend close 19:00", "Institut du Monde Arabe Paris", "Arab_World_Institute"),
     stop(null, 0, null, "pw-st-etienne", "Saint-Étienne-du-Mont", "sight", 48.8465392, 2.3480897, "Place Sainte-Geneviève, 75005 Paris, France", "Walk-by on the Left Bank walk.", "FREE church; exterior photo planned · Worship may limit indoor visits", "Église Saint-Étienne-du-Mont Paris", "Saint-Étienne-du-Mont"),
-    stop("17:45", 5, null, "pw-pantheon", "Panthéon (Exterior)", "sight", 48.8462218, 2.3464138, "Pl. du Panthéon, 75005 Paris, France", "Quick exterior photo.", "Inside paid; last entry 17:15, closes 18:00", "Panthéon Paris", "Panthéon"),
-    stop("17:50", 45, "10 min walk", "pw-luxembourg", "Luxembourg Garden", "photo", 48.8466144, 2.3363309, "Jardin du Luxembourg, 75006 Paris, France", "Enjoy the gardens before the 18:45 closure.", "FREE · Aim to enter 18:20; closes 18:45", "Jardin du Luxembourg Paris", "Jardin_du_Luxembourg"),
+    stop("18:10", 5, null, "pw-pantheon", "Panthéon (Exterior)", "sight", 48.8462218, 2.3464138, "Pl. du Panthéon, 75005 Paris, France", "Quick exterior photo.", "Inside paid; last entry 17:15, closes 18:00", "Panthéon Paris", "Panthéon"),
+    stop("18:20", 20, "5 min walk to the gate", "pw-luxembourg", "Luxembourg Garden", "photo", 48.8466144, 2.3363309, "Jardin du Luxembourg, 75006 Paris, France", "Enjoy the gardens before the 18:45 closure. Enter by the Rue Soufflot / Médicis side, closest to the Panthéon.", "FREE · Aim to enter 18:20; closes 18:45", "Jardin du Luxembourg Paris", "Jardin_du_Luxembourg"),
     stop("18:45", 5, "5 min walk", "pw-choupinet", "Le Choupinet", "food", 48.8476555, 2.3407853, "58 Bd Saint-Michel, 75006 Paris, France", "Quick exterior photo.", "Exterior photo FREE · Food / drinks cost extra", "Le Choupinet, 58 Boulevard Saint-Michel, 75006 Paris"),
     stop(null, 0, null, "pw-sorbonne", "Place de la Sorbonne", "photo", 48.8487484, 2.3422991, "Pl. de la Sorbonne, 75005 Paris, France", part("18:45 Le Choupinet & Sorbonne"), "FREE square · exterior photo · Chapel interior not included", "Place de la Sorbonne Paris", "University_of_Paris"),
     stop("18:55", 5, "5 min walk", "pw-cluny", "Musée de Cluny (Exterior)", "sight", 48.8504833, 2.3440808, "28 Rue du Sommerard, 75005 Paris, France", "Quick exterior photo.", "Paid inside; closes 18:15 · Exterior only at our arrival", "Musée de Cluny Paris", "Musée_de_Cluny"),
@@ -371,12 +371,12 @@ window.SEED_SPOTS = [
     stop("19:50", 5, "10 min walk", "pw-conciergerie", "Palais de Justice", "sight", 48.8557234, 2.3451467, "8 Bd du Palais, 75001 Paris, France", "Quick exterior photo.", "FREE street-side photo · No casual interior visit planned", "Palais de Justice Paris", "Palais_de_Justice,_Paris"),
     stop(null, 0, null, "pw-clock", "Clock / Conciergerie", "photo", 48.8560114, 2.3454953, "2 Bd du Palais, 75001 Paris, France", part("19:50 Palais de Justice & Conciergerie"), "Exterior FREE; interior paid · Last entry 17:30; closes 18:00", "Conciergerie Paris", "Conciergerie"),
     stop("20:05", 5, "5 min walk", "pw-pont-neuf", "Henri IV Statue & Pont Neuf", "photo", 48.8571638, 2.3409791, "15 Pl. du Pont-Neuf, 75001 Paris, France", "Quick photo stop next to the pier.", "FREE public monument", "Statue Henri IV Pont Neuf Paris", "Pont_Neuf"),
-    stop("20:15", 30, "-", "pw-dinner", "Dinner / Takeaway", "food", 48.8566, 2.3423, "Near Pont Neuf, 75001 Paris, France", "Grab food nearby before checking in for the cruise.", "Takeaway food: allow 15–20 minutes", "takeaway food near Pont Neuf Paris"),
+    stop("20:15", 30, "2 min walk", "pw-dinner", "Dinner: Restaurant Paul (escargots)", "food", 48.8563303, 2.3422628, "15 Pl. Dauphine, 75001 Paris, France", "Escargots de Bourgogne on the romantic Place Dauphine terrace before checking in for the cruise.", "Dinner from 19:00 · about €20–60 · 4.2★ · Book a 20:15 table, order the escargots right away and ask for the bill with them: the pier is 2 min away, arrive by 20:45", "Restaurant Paul, 15 Place Dauphine, 75001 Paris"),
     stop("20:45", 105, "-", "pw-cruise", "Seine Cruise (Vedettes du Pont Neuf)", "sight", 48.8574484, 2.3409317, "1 Square du Vert Galant, 75001 Paris, France", "Arrive by 20:45 for the 21:15 departure.", "BOOKED · Arrive 20:45; 21:00 latest per ticket · Departs 21:15 · Allow until 22:30 for return", "Vedettes du Pont Neuf Paris"),
   ];
   // The doc's travel rows belong to the stop they lead to.
-  day1[1].via = via("20 min Metro", { at: "15:40", label: "Metro to the Marais", note: "Take the metro to the Archives area." });
-  day1[6].via = { how: "30 min walk to the Panthéon", mins: null, at: "17:15", label: "Transit Walk: The Left Bank",
+  day1[1].via = via("20 min Metro", { at: "16:10", label: "Metro to the Marais", note: "Take the metro to the Archives area." });
+  day1[6].via = { how: "30 min walk to the Panthéon", mins: null, at: "17:40", label: "Transit Walk: The Left Bank",
     note: "Brisk walk passing Saint-Paul-Saint-Louis, Pont de Sully, Arab World Institute, and Saint-Étienne-du-Mont." };
   const day2 = [
     stop("08:35", 0, "5 min walk", "pw-cour-rome", "Gare Saint-Lazare - Cour de Rome", "photo", 48.8758885, 2.3240292, "Cour de Rome, 75008 Paris, France", "Quick photo without stopping.", "", "Cour de Rome Gare Saint-Lazare Paris", "Gare_Saint-Lazare"),
@@ -414,7 +414,7 @@ window.SEED_SPOTS = [
     stop("14:00", 29, "5 min walk", "pw-hotel", "Residhome Paris Opéra", "stay", 48.874757, 2.32909, "30 Rue Joubert, 75009 Paris, France", "Arrive at the hotel to grab your luggage and prepare to leave.", "", "Residhome Paris Opéra, 30 Rue Joubert, 75009 Paris"),
   ];
   window.SEED_PARIS_WEEKEND = {
-    version: 3,
+    version: 4,
     start: { name: "Residhome Paris Opéra", lat: 48.874757, lng: 2.32909 },
     names: ["Saturday", "Sunday"],
     titles: ["The Marais, Latin Quarter & Seine Walk", "West Paris, Eiffel Tower & Louvre"],
@@ -425,7 +425,7 @@ window.SEED_SPOTS = [
     departs: ["Depart hotel.", "Depart hotel."],
     finish: [{ at: "22:30", name: "Cruise ends", note: "Hotel / optional dinner afterward." },
       { at: "14:29", name: "Departure", note: "Leave hotel to catch Metro 12." }],
-    hours: [{ start: "15:30", end: "22:30" }, { start: "08:30", end: "14:29" }],
+    hours: [{ start: "16:00", end: "22:30" }, { start: "08:30", end: "14:29" }],
     removed: [],
     days: [day1, day2],
   };

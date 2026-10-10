@@ -109,29 +109,37 @@
   store.set("seeded", seeded);
   // The Paris weekend plan (Saturday + Sunday), added once to the Paris trip.
   const weekend = window.SEED_PARIS_WEEKEND;
-  if (weekend && !store.get("parisWeekend", false)) {
+  const weekendDone = store.get("parisWeekend", 0);
+  if (weekend && (weekendDone === true ? 1 : Number(weekendDone) || 0) < (weekend.version || 1)) {
     let paris = trips.find((t) => t.id === "paris");
     const seedParis = (window.SEED_TRIPS || []).find((t) => t.id === "paris");
     if (!paris && seedParis) trips.push(paris = { ...structuredClone(seedParis), plan: null, done: [] });
     if (paris) {
-      const list = weekend.days.map((day) => day.map(({ ref, at, stay, note, ...spot }) => {
+      const gone = new Set(weekend.removed || []);
+      paris.spots = paris.spots.filter((x) => !gone.has(x.id));
+      paris.done = (paris.done || []).filter((id) => !gone.has(id));
+      const list = weekend.days.map((day) => day.map(({ ref, at, stay, note, via, name, ...spot }) => {
         let sp = paris.spots.find((x) => x.id === (ref || spot.id));
         if (!sp && ref) sp = structuredClone(seedParis.spots.find((x) => x.id === ref));
         if (!sp) sp = { ...spot };
         if (!paris.spots.includes(sp)) paris.spots.push(sp);
-        Object.assign(sp, { stay, note });
+        Object.assign(sp, { name, stay, note });
         if (at) sp.at = at; else delete sp.at;
+        if (via) sp.via = structuredClone(via); else delete sp.via;
         delete sp.skip;
         return sp.id;
       }));
       paris.start = { ...weekend.start };
       paris.days = { count: list.length, start: weekend.hours[1].start, end: weekend.hours[0].end,
-        hours: structuredClone(weekend.hours), names: weekend.names.slice(), list, leftover: [], current: 0 };
+        hours: structuredClone(weekend.hours), names: weekend.names.slice(), titles: weekend.titles.slice(),
+        blurbs: weekend.blurbs.slice(), departs: weekend.departs.slice(), finish: structuredClone(weekend.finish),
+        list, leftover: [], current: 0 };
       paris.plan = list[0].slice();
+      delete paris.undo;
       store.set("activeTrip", "paris");
       store.set("trips", trips);
     }
-    store.set("parisWeekend", true);
+    store.set("parisWeekend", weekend.version || 1);
   }
   // Starter inspiration posts for the ready-made cities (added once per spot,
   // so posts you remove stay removed).
@@ -423,7 +431,10 @@
       return `<div class="section start-box">
         <div class="start-row"><span class="stop-letter start-letter">🏁</span>
           <span class="stop-main"><div class="stop-name">Start: ${esc(start.name)}</div>
-            <div class="stop-meta">Your tour is ordered from here</div></span>
+            <div class="stop-meta">${(() => {
+              const d = state.trip.days;
+              return d ? `<b class="time">${esc(hoursOf(d.current).start)}</b> · ${esc(d.departs?.[d.current] || "Depart")}` : "Your tour is ordered from here";
+            })()}</div></span>
           <button class="mini text" id="start-change">Change</button>
           <button class="mini" id="start-clear" title="Remove start point" aria-label="Remove start point">${ICON("xmark")}</button></div>
       </div>`;
@@ -785,6 +796,14 @@
 
   function legHtml(from, to, key) {
     state.legs[key] = { from, to };
+    if (to.via) {
+      const v = to.via;
+      const ride = /metro|bus|tram|train|rer/i.test(v.how);
+      return `<li class="leg"><span>${ICON(ride ? "bus" : "walk")} ${v.at ? `<b class="time">${esc(v.at)}</b> ` : ""}${v.label ? `<b>${esc(v.label)}</b> · ` : ""}${v.how ? esc(v.how) : "Nearby"}</span>
+          <button class="leg-btn" data-leg="${key}">${ICON("bus")} Transit</button></li>
+        ${v.note ? `<li class="leg leg-note">${esc(v.note)}</li>` : ""}
+        <li class="leg-detail" id="leg-${key}" hidden></li>`;
+    }
     const mins = walkMin(from, to);
     const long = mins >= LONG_WALK_MIN;
     return `<li class="leg"><span>${ICON("walk")} ${mins} min walk</span>
@@ -891,7 +910,7 @@
     let t = startMin, prev = state.trip.start, lunched = hasFood;
     const items = [];
     for (const s of stops) {
-      if (prev) t += walkMin(prev, s);
+      if (prev) t += s.via ? s.via.mins : walkMin(prev, s);
       // A planned time ("at") wins over the estimate; flag it when the walk
       // there would make you more than 10 minutes late.
       let tight = false;
@@ -945,6 +964,7 @@
     if (!timed.length) return true;
     if (!confirm(`${timed.length} stops have planned times (🔒). Re-planning reorders your days and clears those times. Continue?`)) return false;
     timed.forEach((x) => delete x.at);
+    spots().forEach((x) => delete x.via);
     return true;
   }
   // Undo for Optimize / Rebuild / Build my days: a copy of the plan (and
@@ -956,7 +976,7 @@
       label, at: Date.now(),
       plan: plan() ? plan().slice() : null,
       days: state.trip.days ? structuredClone(state.trip.days) : null,
-      times: Object.fromEntries(spots().filter((x) => x.at).map((x) => [x.id, x.at])),
+      times: Object.fromEntries(spots().filter((x) => x.at || x.via).map((x) => [x.id, { at: x.at, via: x.via }])),
     };
   }
   const UNDO = { label: "Undo", onClick: () => undoReplan() };
@@ -965,7 +985,11 @@
     const u = state.trip.undo;
     if (!u) return;
     const known = new Set(spots().map((x) => x.id));
-    for (const sp of spots()) { if (u.times[sp.id]) sp.at = u.times[sp.id]; else delete sp.at; }
+    for (const sp of spots()) {
+      const k = typeof u.times[sp.id] === "string" ? { at: u.times[sp.id] } : u.times[sp.id] || {};
+      if (k.at) sp.at = k.at; else delete sp.at;
+      if (k.via) sp.via = k.via; else delete sp.via;
+    }
     if (u.days) {
       u.days.list = u.days.list.map((ids) => ids.filter((id) => known.has(id)));
       u.days.leftover = (u.days.leftover || []).filter((id) => known.has(id));
@@ -1125,6 +1149,8 @@
     const custom = !!d.hours?.[d.current];
     return `<div class="section days-box">
       <div class="day-chips">${d.list.map((ids, i) => `<button class="day-chip ${i === d.current ? "on" : ""}" data-day="${i}">${esc(dayName(i))}<small>${ids.length} stops</small></button>`).join("")}</div>
+      ${d.titles?.[d.current] ? `<h3 class="day-title">${esc(dayName(d.current))}: ${esc(d.titles[d.current])}</h3>` : ""}
+      ${d.blurbs?.[d.current] ? `<p class="hint day-blurb">${esc(d.blurbs[d.current])}</p>` : ""}
       <p class="day-line"><b>${date ? fmtDay(date) : esc(dayName(d.current))}</b> · ${plan().length ? `ends about ${fmtClock(sched.endsAt)}` : "no stops yet"}${over ? ` <span class="warn">runs past ${esc(h.end)}: tap Rebuild to move stops</span>` : ""}</p>
       <div class="day-hours">
         <span>${esc(dayName(d.current))} hours</span>
@@ -1215,7 +1241,10 @@
           <button class="btn" id="btn-popular">${ICON("star")} Popular spots</button>
         </div>
       </div>
-      ${stops.length ? `<ul class="plain stops">${rows}</ul>`
+      ${stops.length ? `<ul class="plain stops">${rows}${(() => {
+        const f = days?.finish?.[days.current];
+        return f ? `<li class="leg finish">🏁 <b class="time">${esc(f.at)}</b> <b>${esc(f.name)}</b>${f.note ? ` · ${esc(f.note)}` : ""}</li>` : "";
+      })()}</ul>`
         : `<p class="empty">Your day is empty. Search for places with “🔍 Add spots” or tap “📍 Drop a pin”${map?.kind === "google" ? ", or tap any place on the map" : ""}.</p>`}
       ${unplanned.length ? `<div class="section"><h3>${days ? (days.leftover.length ? "Didn't fit / not in any day" : "Not in any day") : "Saved, not in today's plan"}</h3><ul class="plain nearby">
         ${unplanned.map((s) => `<li data-id="${esc(s.id)}"><span class="dot" style="background:${(CATS[s.category] || CATS.sight).color}"></span>

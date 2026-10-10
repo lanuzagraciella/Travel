@@ -128,6 +128,12 @@
         delete sp.skip;
         return sp.id;
       }));
+      for (const { at, via, poses, ...spot } of weekend.extras || []) {
+        let sp = paris.spots.find((x) => x.id === spot.id);
+        if (!sp) paris.spots.push(sp = { poses: [] });
+        Object.assign(sp, structuredClone(spot));
+        delete sp.at; delete sp.via;
+      }
       paris.start = { ...weekend.start };
       paris.days = { count: list.length, start: weekend.hours[1].start, end: weekend.hours[0].end,
         hours: structuredClone(weekend.hours), names: weekend.names.slice(), titles: weekend.titles.slice(),

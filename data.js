@@ -333,69 +333,89 @@ window.SEED_SPOTS = [
   ];
 })();
 
-// "Paris weekend": the Saturday + Sunday plan from Graciella's itinerary,
-// copied row by row. Each stop has its planned time (`at`), visit length
-// (`stay`, minutes, 0 = walk-by), how you get there (`via`, as written in
-// the itinerary) and the note. `ref` reuses a ready-made Paris spot.
+// "Paris weekend": the Saturday + Sunday plan from Graciella's itinerary doc,
+// with every pin from her Canva map (Google Maps positions). Each stop has
+// its planned time (`at`, none for extra pins inside a doc row), visit
+// length (`stay`, 0 = walk-by), how to get there (`via`, as written in the
+// doc), the doc's note, the Canva notes (`info`) and the Google Maps search
+// from the Canva link (`gmaps`). Ids starting with "pa-" reuse ready-made
+// Paris spots so their saved inspiration stays.
 (() => {
   // "5 min walk", "20 min Metro", "1 hr 45 mins" → minutes.
   const mins = (t) => (Number((/(\d+)\s*hr/.exec(t) || [])[1] || 0) * 60) + Number((/(\d+)\s*min/.exec(t) || [])[1] || 0);
-  const via = (how, extra = {}) => (how === "-" ? { how: "", mins: 0, ...extra } : { how, mins: mins(how), ...extra });
-  const p = (at, stay, how, id, name, category, lat, lng, address, note, wiki = null) =>
-    ({ at, stay, via: via(how), id, name, category, lat, lng, address, note, wiki, poses: [] });
-  const ref = (at, stay, how, id, name, note) => ({ at, stay, via: via(how), ref: id, name, note });
+  const via = (how, extra = {}) => (how === "-" ? { how: "", mins: 0, ...extra } : how ? { how, mins: mins(how), ...extra } : null);
+  // stop(at, stay, how, id, name, category, lat, lng, address, note, info, gmaps, wiki)
+  const stop = (at, stay, how, id, name, category, lat, lng, address, note, info, gmaps, wiki = null) =>
+    ({ at, stay, via: via(how), id, name, category, lat, lng, address, note, info, gmaps, wiki, poses: [] });
+  const part = (row) => `Part of the ${row} stop.`;
   const day1 = [
-    p("15:35", 5, "5 min walk", "pw-garnier", "Opéra Garnier (Exterior)", "sight", 48.8720, 2.3316, "Place de l'Opéra, 75009 Paris, France", "Exterior photos only.", "Palais_Garnier"),
-    p("16:00", 30, "-", "pw-soubise", "National Archives / Hôtel de Soubise", "sight", 48.8597, 2.3575, "60 Rue des Francs-Bourgeois, 75003 Paris, France", "Free interior access; closes at 17:30.", "Hôtel_de_Soubise"),
-    p("16:30", 5, "5 min walk", "pw-lamoignon", "Hôtel de Lamoignon", "photo", 48.8571, 2.3611, "24 Rue Pavée, 75004 Paris, France", "Quick courtyard photo.", "Hôtel_Lamoignon"),
-    p("16:40", 5, "5 min walk", "pw-carnavalet", "Carnavalet (Exterior)", "sight", 48.8575, 2.3625, "23 Rue de Sévigné, 75003 Paris, France", "Exterior photo stop.", "Musée_Carnavalet"),
-    p("16:50", 10, "5 min walk", "pw-vosges", "Place des Vosges", "photo", 48.8556, 2.3655, "Place des Vosges, 75004 Paris, France", "Free square and arcades.", "Place_des_Vosges"),
-    p("17:05", 5, "5 min walk", "pw-sully", "Hôtel de Sully", "photo", 48.8545, 2.3640, "62 Rue Saint-Antoine, 75004 Paris, France", "Quick exterior/courtyard photo stop.", "Hôtel_de_Sully"),
-    p("17:45", 5, "-", "pw-pantheon", "Panthéon (Exterior)", "sight", 48.8462, 2.3464, "Place du Panthéon, 75005 Paris, France", "Quick exterior photo.", "Panthéon"),
-    p("17:50", 45, "10 min walk", "pw-luxembourg", "Luxembourg Garden", "photo", 48.8462, 2.3372, "Jardin du Luxembourg, 75006 Paris, France", "Enjoy the gardens before the 18:45 closure.", "Jardin_du_Luxembourg"),
-    p("18:45", 5, "5 min walk", "pw-sorbonne", "Le Choupinet & Sorbonne", "photo", 48.8487, 2.3431, "Place de la Sorbonne, 75005 Paris, France", "Quick exterior photo.", "University_of_Paris"),
-    p("18:55", 5, "5 min walk", "pw-cluny", "Musée de Cluny (Exterior)", "sight", 48.8506, 2.3440, "28 Rue du Sommerard, 75005 Paris, France", "Quick exterior photo.", "Musée_de_Cluny"),
-    p("19:05", 5, "5 min walk", "pw-st-michel", "Fontaine Saint-Michel & Huchette", "photo", 48.8533, 2.3437, "Place Saint-Michel, 75005 Paris, France", "Quick photo stop.", "Fontaine_Saint-Michel"),
-    ref("19:15", 10, "5 min walk", "pa-shakespeare", "Shakespeare & Company", "Free browsing."),
-    p("19:30", 15, "5 min walk", "pw-notre-dame", "Notre-Dame (Exterior)", "sight", 48.8530, 2.3499, "6 Parvis Notre-Dame, 75004 Paris, France", "Extended exterior visit.", "Notre-Dame_de_Paris"),
-    p("19:50", 5, "10 min walk", "pw-conciergerie", "Palais de Justice & Conciergerie", "sight", 48.8560, 2.3455, "2 Bd du Palais, 75001 Paris, France", "Quick exterior photo.", "Conciergerie"),
-    p("20:05", 5, "5 min walk", "pw-pont-neuf", "Henri IV Statue & Pont Neuf", "photo", 48.8572, 2.3409, "Pont Neuf, 75001 Paris, France", "Quick photo stop next to the pier.", "Pont_Neuf"),
-    p("20:15", 30, "-", "pw-dinner", "Dinner / Takeaway", "food", 48.8566, 2.3423, "Place Dauphine, 75001 Paris, France", "Grab food nearby before checking in for the cruise."),
-    p("20:45", 105, "-", "pw-cruise", "Seine Cruise (Vedettes du Pont Neuf)", "sight", 48.8577, 2.3397, "Square du Vert-Galant, 75001 Paris, France", "Arrive by 20:45 for the 21:15 departure."),
+    stop("15:35", 5, "5 min walk", "pw-garnier", "Opéra Garnier (Exterior)", "sight", 48.8719697, 2.3316014, "Pl. de l'Opéra, 75009 Paris, France", "Exterior photos only.", "Paid inside · closes 17:00", "Opéra Garnier", "Palais_Garnier"),
+    stop("16:00", 30, null, "pw-soubise", "National Archives / Hôtel de Soubise", "sight", 48.8604062, 2.3577888, "60 Rue des Francs Bourgeois, 75003 Paris, France", "Free interior access; closes at 17:30.", "FREE inside; standard close 17:30 · Brief visit", "Hôtel de Soubise Paris", "Hôtel_de_Soubise"),
+    stop("16:30", 5, "5 min walk", "pw-lamoignon", "Hôtel de Lamoignon", "photo", 48.8569229, 2.3618595, "24 Rue Pavée, 75004 Paris, France", "Quick courtyard photo.", "Quick courtyard photo if accessible · Library closes 18:00; no palace tour", "Hôtel de Lamoignon Paris", "Hôtel_Lamoignon"),
+    stop("16:40", 5, "5 min walk", "pw-carnavalet", "Carnavalet (Exterior)", "sight", 48.8570669, 2.3628579, "23 Rue de Sévigné, 75003 Paris, France", "Exterior photo stop.", "Permanent collection FREE · Last entry 17:15; closes 18:00 · Courtyard access not guaranteed", "Musée Carnavalet Paris", "Musée_Carnavalet"),
+    stop("16:50", 10, "5 min walk", "pw-vosges", "Place des Vosges", "photo", 48.8556114, 2.3655266, "Pl. des Vosges, 75004 Paris, France", "Free square and arcades.", "FREE square / arcades · Central garden has gates", "Place des Vosges Paris", "Place_des_Vosges"),
+    stop("17:05", 5, "5 min walk", "pw-sully", "Hôtel de Sully", "photo", 48.8543941, 2.3637542, "62 Rue Saint-Antoine, 75004 Paris, France", "Quick exterior/courtyard photo stop.", "FREE courtyard & garden; closes 19:00 · Interiors not freely open", "Hôtel de Sully Paris", "Hôtel_de_Sully"),
+    stop(null, 0, null, "pw-st-paul", "Saint-Paul-Saint-Louis", "sight", 48.8544675, 2.3614508, "99 Rue Saint-Antoine, 75004 Paris, France", "Walk-by on the Left Bank walk.", "FREE church; closes 20:00 · Exterior photo; skip if running late", "Église Saint-Paul-Saint-Louis Paris", "Saint-Paul-Saint-Louis"),
+    stop(null, 0, null, "pw-pont-sully", "Pont de Sully", "photo", 48.8498408, 2.3580242, "Quai de la Tournelle, Bd Henri IV, 75005 Paris, France", "Walk-by on the Left Bank walk.", "FREE public bridge / quick photo", "Pont de Sully Paris", "Pont_de_Sully"),
+    stop(null, 0, null, "pw-ima", "Arab World Institute (Exterior)", "sight", 48.8489257, 2.3572313, "1 Rue des Fossés Saint-Bernard, 75005 Paris, France", "Walk-by on the Left Bank walk.", "Museum ticketed; weekend close 19:00", "Institut du Monde Arabe Paris", "Arab_World_Institute"),
+    stop(null, 0, null, "pw-st-etienne", "Saint-Étienne-du-Mont", "sight", 48.8465392, 2.3480897, "Place Sainte-Geneviève, 75005 Paris, France", "Walk-by on the Left Bank walk.", "FREE church; exterior photo planned · Worship may limit indoor visits", "Église Saint-Étienne-du-Mont Paris", "Saint-Étienne-du-Mont"),
+    stop("17:45", 5, null, "pw-pantheon", "Panthéon (Exterior)", "sight", 48.8462218, 2.3464138, "Pl. du Panthéon, 75005 Paris, France", "Quick exterior photo.", "Inside paid; last entry 17:15, closes 18:00", "Panthéon Paris", "Panthéon"),
+    stop("17:50", 45, "10 min walk", "pw-luxembourg", "Luxembourg Garden", "photo", 48.8466144, 2.3363309, "Jardin du Luxembourg, 75006 Paris, France", "Enjoy the gardens before the 18:45 closure.", "FREE · Aim to enter 18:20; closes 18:45", "Jardin du Luxembourg Paris", "Jardin_du_Luxembourg"),
+    stop("18:45", 5, "5 min walk", "pw-choupinet", "Le Choupinet", "food", 48.8476555, 2.3407853, "58 Bd Saint-Michel, 75006 Paris, France", "Quick exterior photo.", "Exterior photo FREE · Food / drinks cost extra", "Le Choupinet, 58 Boulevard Saint-Michel, 75006 Paris"),
+    stop(null, 0, null, "pw-sorbonne", "Place de la Sorbonne", "photo", 48.8487484, 2.3422991, "Pl. de la Sorbonne, 75005 Paris, France", part("18:45 Le Choupinet & Sorbonne"), "FREE square · exterior photo · Chapel interior not included", "Place de la Sorbonne Paris", "University_of_Paris"),
+    stop("18:55", 5, "5 min walk", "pw-cluny", "Musée de Cluny (Exterior)", "sight", 48.8504833, 2.3440808, "28 Rue du Sommerard, 75005 Paris, France", "Quick exterior photo.", "Paid inside; closes 18:15 · Exterior only at our arrival", "Musée de Cluny Paris", "Musée_de_Cluny"),
+    stop("19:05", 5, "5 min walk", "pw-st-michel", "Fontaine Saint-Michel", "photo", 48.8532372, 2.3437736, "Pl. Saint-Michel, 75005 Paris, France", "Quick photo stop.", "FREE public fountain", "Fontaine Saint-Michel Paris", "Fontaine_Saint-Michel"),
+    stop(null, 0, null, "pw-huchette", "Rue de la Huchette", "photo", 48.8530622, 2.3454414, "Rue de la Huchette, 75005 Paris, France", part("19:05 Fontaine Saint-Michel & Huchette"), "FREE street · quick photo", "Rue de la Huchette Paris", "Rue_de_la_Huchette"),
+    stop("19:15", 10, "5 min walk", "pa-shakespeare", "Shakespeare & Company", "shop", 48.8525632, 2.3471303, "37 Rue de la Bûcherie, 75005 Paris, France", "Free browsing.", "FREE browsing; closes 21:00 · Exterior photo if there is a queue", "Shakespeare and Company Paris", "Shakespeare_and_Company_(bookstore)"),
+    stop("19:30", 15, "5 min walk", "pw-notre-dame", "Notre-Dame (Exterior)", "sight", 48.8529682, 2.3499021, "6 Parvis Notre-Dame - Pl. Jean-Paul II, 75004 Paris, France", "Extended exterior visit.", "Cathedral FREE; closes 19:30 · Indoor visit not in this schedule", "Cathédrale Notre-Dame de Paris", "Notre-Dame_de_Paris"),
+    stop("19:50", 5, "10 min walk", "pw-conciergerie", "Palais de Justice", "sight", 48.8557234, 2.3451467, "8 Bd du Palais, 75001 Paris, France", "Quick exterior photo.", "FREE street-side photo · No casual interior visit planned", "Palais de Justice Paris", "Palais_de_Justice,_Paris"),
+    stop(null, 0, null, "pw-clock", "Clock / Conciergerie", "photo", 48.8560114, 2.3454953, "2 Bd du Palais, 75001 Paris, France", part("19:50 Palais de Justice & Conciergerie"), "Exterior FREE; interior paid · Last entry 17:30; closes 18:00", "Conciergerie Paris", "Conciergerie"),
+    stop("20:05", 5, "5 min walk", "pw-pont-neuf", "Henri IV Statue & Pont Neuf", "photo", 48.8571638, 2.3409791, "15 Pl. du Pont-Neuf, 75001 Paris, France", "Quick photo stop next to the pier.", "FREE public monument", "Statue Henri IV Pont Neuf Paris", "Pont_Neuf"),
+    stop("20:15", 30, "-", "pw-dinner", "Dinner / Takeaway", "food", 48.8566, 2.3423, "Near Pont Neuf, 75001 Paris, France", "Grab food nearby before checking in for the cruise.", "Takeaway food: allow 15–20 minutes", "takeaway food near Pont Neuf Paris"),
+    stop("20:45", 105, "-", "pw-cruise", "Seine Cruise (Vedettes du Pont Neuf)", "sight", 48.8574484, 2.3409317, "1 Square du Vert Galant, 75001 Paris, France", "Arrive by 20:45 for the 21:15 departure.", "BOOKED · Arrive 20:45; 21:00 latest per ticket · Departs 21:15 · Allow until 22:30 for return", "Vedettes du Pont Neuf Paris"),
   ];
-  // The two travel rows of Saturday belong to the stop they lead to.
+  // The doc's travel rows belong to the stop they lead to.
   day1[1].via = via("20 min Metro", { at: "15:40", label: "Metro to the Marais", note: "Take the metro to the Archives area." });
-  day1[6].via = via("30 min walk", { at: "17:15", label: "Transit Walk: The Left Bank",
-    note: "Brisk walk passing Saint-Paul-Saint-Louis, Pont de Sully, Arab World Institute, and Saint-Étienne-du-Mont." });
+  day1[6].via = { how: "30 min walk to the Panthéon", mins: null, at: "17:15", label: "Transit Walk: The Left Bank",
+    note: "Brisk walk passing Saint-Paul-Saint-Louis, Pont de Sully, Arab World Institute, and Saint-Étienne-du-Mont." };
   const day2 = [
-    p("08:35", 0, "5 min walk", "pw-cour-rome", "Gare Saint-Lazare - Cour de Rome", "photo", 48.8758, 2.3245, "Cour de Rome, 75008 Paris, France", "Quick photo without stopping.", "Gare_Saint-Lazare"),
-    p("08:45", 0, "10 min walk", "pw-augustin", "Église Saint-Augustin", "sight", 48.8758, 2.3184, "46 Bd Malesherbes, 75008 Paris, France", "Quick exterior photo on the move.", "Saint-Augustin,_Paris"),
-    p("09:00", 30, "15 min walk", "pw-monceau", "Parc Monceau", "photo", 48.8797, 2.3091, "35 Bd de Courcelles, 75008 Paris, France", "Dedicated time for a morning stroll.", "Parc_Monceau"),
-    p("09:35", 0, "5 min walk", "pw-nevsky", "Cathedrale Saint Alexandre Nevsky", "sight", 48.8780, 2.3017, "12 Rue Daru, 75008 Paris, France", "Quick photo as you pass.", "Alexander_Nevsky_Cathedral,_Paris"),
-    ref("09:45", 15, "10 min walk", "pa-arc", "Arc de Triomphe", "View from the crosswalks and base."),
-    p("10:05", 0, "5 min walk", "pw-133-champs", "133 Av. des Champs-Élysées", "photo", 48.8730, 2.2990, "133 Av. des Champs-Élysées, 75008 Paris, France", "Snap a photo while walking down the avenue."),
-    p("10:15", 0, "10 min walk", "pw-etats-unis", "Place des États-Unis & Baccarat", "photo", 48.8677, 2.2917, "Place des États-Unis, 75116 Paris, France", "Continuous walking photo.", "Place_des_États-Unis"),
-    p("10:20", 0, "5 min walk", "pw-guimet", "Musée Guimet", "sight", 48.8652, 2.2936, "6 Place d'Iéna, 75116 Paris, France", "Continuous walking photo.", "Musée_Guimet"),
-    ref("10:30", 10, "10 min walk", "pa-trocadero", "Palais de Chaillot & Trocadéro", "Stop for the iconic elevated Eiffel Tower view."),
-    ref("10:55", 20, "15 min walk", "pa-eiffel", "Eiffel Tower (Free Esplanade)", "Walk under and around the base."),
-    p("11:20", 5, "5 min walk", "pw-universite", "Rue de l'Université", "photo", 48.8590, 2.3018, "Rue de l'Université, 75007 Paris, France", "Stop for the classic street-level view."),
-    p("11:30", 0, "5 min walk", "pw-branly", "Musée du quai Branly", "sight", 48.8609, 2.2977, "37 Quai Branly, 75007 Paris, France", "View the exterior green wall as you walk.", "Musée_du_quai_Branly_–_Jacques_Chirac"),
-    p("11:35", 0, "5 min walk", "pw-trinite", "Cathédrale de la Sainte-Trinité", "sight", 48.8620, 2.3015, "1 Quai Branly, 75007 Paris, France", "Quick photo of the domes.", "Holy_Trinity_Cathedral,_Paris"),
-    p("11:45", 0, "10 min walk", "pw-invalides-bridge", "Quai d'Orsay & Pont des Invalides", "photo", 48.8628, 2.3103, "Quai d'Orsay, 75007 Paris, France", "Riverside walk.", "Pont_des_Invalides"),
-    ref("11:50", 5, "5 min walk", "pa-alexandre-iii", "Pont Alexandre III", "Brief stop to appreciate the bridge details."),
-    p("12:00", 0, "5 min walk", "pw-palais", "Grand Palais & Petit Palais", "sight", 48.8661, 2.3125, "Av. Winston Churchill, 75008 Paris, France", "Exterior photos while walking past.", "Grand_Palais"),
-    p("12:10", 0, "10 min walk", "pw-concorde", "Place de la Concorde", "sight", 48.8656, 2.3212, "Place de la Concorde, 75008 Paris, France", "View the Obelisk and fountain while crossing.", "Place_de_la_Concorde"),
-    p("12:15", 10, "5 min walk", "pw-tuileries", "Jardin des Tuileries & Grand Bassin", "photo", 48.8634, 2.3275, "Jardin des Tuileries, 75001 Paris, France", "Brisk pace through the main garden path.", "Tuileries_Garden"),
-    p("12:35", 0, "10 min walk", "pw-carrousel", "Arc de Triomphe du Carrousel", "photo", 48.8617, 2.3329, "Place du Carrousel, 75001 Paris, France", "Quick photo.", "Arc_de_Triomphe_du_Carrousel"),
-    ref("12:40", 10, "5 min walk", "pa-louvre", "Louvre (Courtyard/Pyramid)", "Photo stop at the glass pyramids."),
-    ref("13:00", 5, "10 min walk", "pa-palais-royal", "Palais Royal & Colonnes de Buren", "Stop at the striped columns."),
-    p("13:10", 5, "5 min walk", "pw-vivienne", "Galerie Vivienne", "photo", 48.8664, 2.3399, "4 Rue des Petits Champs, 75002 Paris, France", "Walk through the covered passage.", "Galerie_Vivienne"),
-    p("13:30", 25, "15 min walk", "pw-lafayette", "Galeries Lafayette & Rooftop", "shop", 48.8738, 2.3320, "40 Bd Haussmann, 75009 Paris, France", "View the dome interior and rooftop views, grab a snack.", "Galeries_Lafayette"),
-    p("14:00", 29, "5 min walk", "pw-hotel", "Residhome Paris Opéra", "stay", 48.8750, 2.3296, "30 Rue Joubert, 75009 Paris, France", "Arrive at the hotel to grab your luggage and prepare to leave."),
+    stop("08:35", 0, "5 min walk", "pw-cour-rome", "Gare Saint-Lazare - Cour de Rome", "photo", 48.8758885, 2.3240292, "Cour de Rome, 75008 Paris, France", "Quick photo without stopping.", "", "Cour de Rome Gare Saint-Lazare Paris", "Gare_Saint-Lazare"),
+    stop("08:45", 0, "10 min walk", "pw-augustin", "Église Saint-Augustin", "sight", 48.8762338, 2.3189491, "Pl. Saint-Augustin, 75008 Paris, France", "Quick exterior photo on the move.", "", "Église Saint-Augustin Paris", "Saint-Augustin,_Paris"),
+    stop("09:00", 30, "15 min walk", "pw-monceau", "Parc Monceau", "photo", 48.8796835, 2.308955, "Parc Monceau, 75008 Paris, France", "Dedicated time for a morning stroll.", "", "Parc Monceau Paris", "Parc_Monceau"),
+    stop("09:35", 0, "5 min walk", "pw-nevsky", "Cathedrale Saint Alexandre Nevsky", "sight", 48.8776402, 2.3019207, "12 Rue Daru, 75008 Paris, France", "Quick photo as you pass.", "", "Cathédrale Saint-Alexandre-Nevsky Paris", "Alexander_Nevsky_Cathedral,_Paris"),
+    stop("09:45", 15, "10 min walk", "pa-arc", "Arc de Triomphe", "sight", 48.8737917, 2.2950275, "Pl. Charles de Gaulle, 75008 Paris, France", "View from the crosswalks and base.", "", "Arc de Triomphe", "Arc_de_Triomphe"),
+    stop("10:05", 0, "5 min walk", "pw-133-champs", "133 Av. des Champs-Élysées", "photo", 48.8727017, 2.2973426, "133 Av. des Champs-Élysées, 75008 Paris, France", "Snap a photo while walking down the avenue.", "", "133 Avenue des Champs-Élysées"),
+    stop("10:15", 0, "10 min walk", "pw-etats-unis", "Place des États-Unis", "photo", 48.8678173, 2.2939776, "Pl. des États-Unis, 75116 Paris, France", "Continuous walking photo.", "", "Place des États-Unis", "Place_des_États-Unis"),
+    stop(null, 0, null, "pw-baccarat", "Maison Baccarat", "shop", 48.8676966, 2.2937018, "11 Pl. des États-Unis, 75116 Paris, France", part("10:15 Place des États-Unis & Baccarat"), "", "Maison Baccarat Paris"),
+    stop("10:20", 0, "5 min walk", "pw-guimet", "Musée Guimet", "sight", 48.8651018, 2.2937604, "6 Pl. d'Iéna, 75116 Paris, France", "Continuous walking photo.", "", "Musée Guimet Paris", "Musée_Guimet"),
+    stop("10:30", 10, "10 min walk", "pa-trocadero", "Palais de Chaillot", "photo", 48.8623687, 2.2881512, "1 Pl. du Trocadéro et du 11 Novembre, 75016 Paris, France", "Stop for the iconic elevated Eiffel Tower view.", "", "Palais de Chaillot Paris", "Palais_de_Chaillot"),
+    stop(null, 0, null, "pw-troca-esplanade", "Trocadéro Esplanade", "photo", 48.8621498, 2.2884502, "Espl. du Trocadéro, 75116 Paris, France", part("10:30 Palais de Chaillot & Trocadéro"), "", "Esplanade du Trocadéro Paris"),
+    stop(null, 0, null, "pw-troca-gardens", "Trocadéro Gardens", "photo", 48.8616885, 2.2892799, "Pl. du Trocadéro et du 11 Novembre, 75016 Paris, France", part("10:30 Palais de Chaillot & Trocadéro"), "", "Jardins du Trocadéro Paris", "Jardins_du_Trocadéro"),
+    stop("10:55", 20, "15 min walk", "pa-eiffel", "Eiffel Tower (Free Esplanade)", "sight", 48.8583701, 2.2944813, "Av. Gustave Eiffel, 75007 Paris, France", "Walk under and around the base.", "", "Tour Eiffel esplanade Paris", "Eiffel_Tower"),
+    stop("11:20", 5, "5 min walk", "pw-universite", "Rue de l'Université", "photo", 48.860325, 2.297641, "218 Rue de l'Université, 75007 Paris, France", "Stop for the classic street-level view.", "", "218 Rue de l'Université Paris"),
+    stop("11:30", 0, "5 min walk", "pw-branly", "Musée du quai Branly - Jacques Chirac", "sight", 48.8608889, 2.297894, "37 Quai Jacques Chirac, 75007 Paris, France", "View the exterior green wall as you walk.", "", "Musée du quai Branly green wall, 218 Rue de l'Université, 75007 Paris", "Musée_du_quai_Branly_–_Jacques_Chirac"),
+    stop("11:35", 0, "5 min walk", "pw-trinite", "Cathédrale de la Sainte-Trinité", "sight", 48.8619251, 2.3010086, "1 Quai Jacques Chirac, 75007 Paris, France", "Quick photo of the domes.", "", "Sainte-Trinité Quai Branly", "Holy_Trinity_Cathedral,_Paris"),
+    stop("11:45", 0, "10 min walk", "pw-invalides-bridge", "Quai d'Orsay & Pont des Invalides", "photo", 48.8635777, 2.3104289, "Pont des Invalides, 75007 Paris, France", "Riverside walk.", "Exterior photo FREE", "Pont des Invalides", "Pont_des_Invalides"),
+    stop("11:50", 5, "5 min walk", "pa-alexandre-iii", "Pont Alexandre III", "photo", 48.8638995, 2.313559, "Pont Alexandre III, 75008 Paris, France", "Brief stop to appreciate the bridge details.", "", "Pont Alexandre III Paris", "Pont_Alexandre_III"),
+    stop("12:00", 0, "5 min walk", "pw-palais", "Grand Palais", "sight", 48.8661091, 2.3124544, "Grand Palais, 75008 Paris, France", "Exterior photos while walking past.", "", "Grand Palais Paris", "Grand_Palais"),
+    stop(null, 0, null, "pw-petit-palais", "Petit Palais", "sight", 48.8660479, 2.3145896, "Av. Winston Churchill, 75008 Paris, France", part("12:00 Grand Palais & Petit Palais"), "", "Petit Palais Paris", "Petit_Palais"),
+    stop("12:10", 0, "10 min walk", "pw-concorde", "Obélisque de Louxor (Place de la Concorde)", "sight", 48.8654831, 2.3211309, "Pl. de la Concorde, 75008 Paris, France", "View the Obelisk and fountain while crossing.", "Exterior FREE", "Obélisque de Louxor", "Luxor_Obelisk"),
+    stop(null, 0, null, "pw-fontaine-mers", "Fontaine des Mers", "photo", 48.8649629, 2.3207592, "Pl. de la Concorde, 75008 Paris, France", part("12:10 Place de la Concorde"), "", "Fontaine des Mers Paris", "Fontaine_des_Mers"),
+    stop("12:15", 10, "5 min walk", "pw-tuileries", "Jardin des Tuileries", "photo", 48.8634916, 2.3274943, "Jardin des Tuileries, 75001 Paris, France", "Brisk pace through the main garden path.", "", "Jardin des Tuileries Paris", "Tuileries_Garden"),
+    stop(null, 0, null, "pw-bassin", "Grand Bassin Rond", "photo", 48.8628913, 2.3293022, "Allée Centrale, Jardin des Tuileries, 75001 Paris, France", part("12:15 Jardin des Tuileries & Grand Bassin"), "", "Grand Bassin Rond Tuileries Paris"),
+    stop(null, 0, null, "pw-carrousel-garden", "Jardin du Carrousel", "photo", 48.8619966, 2.3320701, "6 Av. du Général Lemonnier, 75001 Paris, France", "On the way to the Arc de Triomphe du Carrousel (from the Canva map).", "", "Jardin du Carrousel Paris"),
+    stop("12:35", 0, "10 min walk", "pw-carrousel", "Arc de Triomphe du Carrousel", "photo", 48.861713, 2.3328946, "Pl. du Carrousel, 75001 Paris, France", "Quick photo.", "", "Arc de Triomphe du Carrousel Paris", "Arc_de_Triomphe_du_Carrousel"),
+    stop("12:40", 10, "5 min walk", "pa-louvre", "Louvre (Courtyard/Pyramid)", "sight", 48.8610135, 2.3358583, "Cour Napoléon, 75001 Paris, France", "Photo stop at the glass pyramids.", "", "Pyramide du Louvre Paris", "Louvre_Pyramid"),
+    stop("13:00", 5, "10 min walk", "pa-palais-royal", "Colonnes de Buren", "photo", 48.863612, 2.3370336, "2 Rue de Montpensier, 75001 Paris, France", "Stop at the striped columns.", "", "Colonnes de Buren Palais-Royal Paris", "Les_Deux_Plateaux"),
+    stop(null, 0, null, "pw-palais-royal-garden", "Jardin du Palais-Royal", "photo", 48.8649723, 2.3378061, "8 Rue de Montpensier, 75001 Paris, France", part("13:00 Palais Royal & Colonnes de Buren"), "", "Jardin du Palais-Royal Paris", "Palais-Royal"),
+    stop("13:10", 5, "5 min walk", "pw-vivienne", "Galerie Vivienne", "photo", 48.8663591, 2.339491, "4 Rue des Petits Champs, 75002 Paris, France", "Walk through the covered passage.", "", "Galerie Vivienne, 4 Rue des Petits-Champs, 75002 Paris", "Galerie_Vivienne"),
+    stop("13:30", 25, "15 min walk", "pw-lafayette", "Galeries Lafayette", "shop", 48.8736224, 2.3321099, "40 Bd Haussmann, 75009 Paris, France", "View the dome interior and rooftop views, grab a snack.", "", "Galeries Lafayette Paris Haussmann", "Galeries_Lafayette"),
+    stop(null, 0, null, "pw-rooftop", "Galeries Lafayette Rooftop", "photo", 48.873629, 2.332015, "40 Bd Haussmann, 75009 Paris, France", part("13:30 Galeries Lafayette & Rooftop"), "", "Galeries Lafayette rooftop Paris"),
+    stop("14:00", 29, "5 min walk", "pw-hotel", "Residhome Paris Opéra", "stay", 48.874757, 2.32909, "30 Rue Joubert, 75009 Paris, France", "Arrive at the hotel to grab your luggage and prepare to leave.", "", "Residhome Paris Opéra, 30 Rue Joubert, 75009 Paris"),
   ];
   window.SEED_PARIS_WEEKEND = {
-    version: 2,
-    start: { name: "Residhome Paris Opéra", lat: 48.8750, lng: 2.3296 },
+    version: 3,
+    start: { name: "Residhome Paris Opéra", lat: 48.874757, lng: 2.32909 },
     names: ["Saturday", "Sunday"],
     titles: ["The Marais, Latin Quarter & Seine Walk", "West Paris, Eiffel Tower & Louvre"],
     blurbs: [
@@ -403,10 +423,10 @@ window.SEED_SPOTS = [
       "This route features \"walk-by\" sightseeing for minor monuments to ensure you get dedicated time at Parc Monceau, the Eiffel Tower, and Galeries Lafayette before your afternoon departure.",
     ],
     departs: ["Depart hotel.", "Depart hotel."],
-    finish: [null, { at: "14:29", name: "Departure", note: "Leave hotel to catch Metro 12." }],
+    finish: [{ at: "22:30", name: "Cruise ends", note: "Hotel / optional dinner afterward." },
+      { at: "14:29", name: "Departure", note: "Leave hotel to catch Metro 12." }],
     hours: [{ start: "15:30", end: "22:30" }, { start: "08:30", end: "14:29" }],
-    // Pins from the first version that aren't rows in the itinerary.
-    removed: ["pw-st-paul", "pw-pont-sully", "pw-ima", "pw-st-etienne"],
+    removed: [],
     days: [day1, day2],
   };
 })();

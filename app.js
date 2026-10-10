@@ -118,12 +118,11 @@
       const gone = new Set(weekend.removed || []);
       paris.spots = paris.spots.filter((x) => !gone.has(x.id));
       paris.done = (paris.done || []).filter((id) => !gone.has(id));
-      const list = weekend.days.map((day) => day.map(({ ref, at, stay, note, via, name, ...spot }) => {
-        let sp = paris.spots.find((x) => x.id === (ref || spot.id));
-        if (!sp && ref) sp = structuredClone(seedParis.spots.find((x) => x.id === ref));
-        if (!sp) sp = { ...spot };
-        if (!paris.spots.includes(sp)) paris.spots.push(sp);
-        Object.assign(sp, { name, stay, note });
+      const list = weekend.days.map((day) => day.map(({ at, via, poses, ...spot }) => {
+        let sp = paris.spots.find((x) => x.id === spot.id);
+        if (!sp) paris.spots.push(sp = { poses: [] });
+        Object.assign(sp, structuredClone(spot));
+        if (!spot.wiki) delete sp.wiki;
         if (at) sp.at = at; else delete sp.at;
         if (via) sp.via = structuredClone(via); else delete sp.via;
         delete sp.skip;
@@ -244,6 +243,7 @@
     const ll = (s) => `${s.lat},${s.lng}`;
     if (stops.length === 1) {
       const s = stops[0];
+      if (s.gmaps) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.gmaps)}&travelmode=walking`;
       return `https://www.google.com/maps/dir/?api=1&destination=${ll(s)}` +
         (s.placeId ? `&destination_place_id=${encodeURIComponent(s.placeId)}` : "") + "&travelmode=walking";
     }
@@ -252,7 +252,9 @@
       `&origin=${ll(stops[0])}&destination=${ll(stops[stops.length - 1])}` +
       (mid.length ? `&waypoints=${encodeURIComponent(mid.map(ll).join("|"))}` : "");
   }
-  const gmapsPlaceUrl = (s) => s.placeId
+  const gmapsPlaceUrl = (s) => s.gmaps
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.gmaps)}`
+    : s.placeId
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name)}&query_place_id=${encodeURIComponent(s.placeId)}`
     : `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`;
 
@@ -907,17 +909,17 @@
   function scheduleDay(ids, startMin) {
     const stops = ids.map(spotById).filter(Boolean);
     const hasFood = stops.some((s) => s.category === "food");
-    let t = startMin, prev = state.trip.start, lunched = hasFood;
+    // A day with planned times has its own meal plan: no automatic lunch.
+    let t = startMin, prev = state.trip.start, lunched = hasFood || stops.some((x) => x.at);
     const items = [];
     for (const s of stops) {
-      if (prev) t += s.via ? s.via.mins : walkMin(prev, s);
+      if (prev) t += s.via?.mins ?? walkMin(prev, s);
       // A planned time ("at") wins over the estimate; flag it when the walk
       // there would make you more than 10 minutes late.
       let tight = false;
       if (s.at) {
         tight = t > toMin(s.at) + 10;
         t = toMin(s.at);
-        lunched ||= t >= LUNCH_AT && stops.some((x) => x.at); // a timed day has its own meal plan
       }
       if (!lunched && t >= LUNCH_AT) {
         items.push({ type: "lunch", at: t });
@@ -1208,6 +1210,7 @@
         <span class="stop-main"><div class="stop-name">${esc(s.name)}</div>
           <div class="stop-meta">${time ? `<b class="time">${time.fixed ? "🔒 " : ""}${fmtClock(time.arrive)}${time.leave > time.arrive ? `–${fmtClock(time.leave)}` : " walk-by"}</b>${time.tight ? ` <span class="warn" title="The walk here takes longer than your plan allows">tight</span>` : ""} · ` : ""}${cat.emoji} ${cat.label}${isDone(s.id) ? ' · <span class="stop-done">✓ shot taken</span>' : ""}</div>
           ${s.note ? `<div class="stop-note">${esc(s.note)}</div>` : ""}
+          ${s.info ? `<div class="stop-note stop-info">ℹ️ ${esc(s.info)}</div>` : ""}
           <div class="row-poses" data-poses="${esc(s.id)}"></div></span>
         <button class="mini" data-up="${i}" title="Move up" aria-label="Move up">${ICON("up")}</button>
         <button class="mini" data-down="${i}" title="Move down" aria-label="Move down">${ICON("down")}</button>
@@ -1287,6 +1290,7 @@
         ${detailsHtml(spot)}
         ${spot.bestTime ? `<p>🕒 <b>Best light:</b> ${esc(spot.bestTime)}</p>` : ""}
         ${spot.note ? `<p>📝 ${esc(spot.note)}</p>` : ""}
+        ${spot.info ? `<p>ℹ️ ${esc(spot.info)}</p>` : ""}
         <label class="stay-label">${ICON("clock")} Time here
           <select id="stay-min">${[...new Set([0, 5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, visitMin(spot)])].sort((a, b) => a - b).map((m) =>
             `<option value="${m}" ${visitMin(spot) === m ? "selected" : ""}>${m === 0 ? "Walk-by" : fmtMin(m).replace(/ 0 min$/, "")}</option>`).join("")}</select>
